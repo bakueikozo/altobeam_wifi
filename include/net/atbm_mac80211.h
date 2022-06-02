@@ -23,19 +23,7 @@
 #include <linux/hash.h>
 #include <linux/module.h>
 #include <net/ieee80211_radiotap.h>
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0))
-#include <uapi/linux/sched/types.h>
-#endif
 
-#ifdef CONFIG_ATBM_SELF_WORKQUEUE
-struct atbm_work_struct;
-struct atbm_delayed_work;
-struct atbm_workqueue_struct;
-#else
-#define atbm_workqueue_struct			workqueue_struct
-#define atbm_delayed_work 				delayed_work
-#define atbm_work_struct  				work_struct
-#endif
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0))
 #define IEEE80211_BAND_2GHZ NL80211_BAND_2GHZ
 #define IEEE80211_BAND_5GHZ NL80211_BAND_5GHZ
@@ -202,31 +190,6 @@ enum atbm_ieee80211_eid {
 	ATBM_WLAN_EID_EXT_CHANSWITCH_ANN = 60,
 	ATBM_WLAN_EID_SECONDARY_CH_OFFSET = 62,
 	ATBM_WLAN_EID_PRIVATE = 233,
-};
-/* Action category code */
-enum atbm_ieee80211_category {
-	ATBM_WLAN_CATEGORY_SPECTRUM_MGMT = 0,
-	ATBM_WLAN_CATEGORY_QOS = 1,
-	ATBM_WLAN_CATEGORY_DLS = 2,
-	ATBM_WLAN_CATEGORY_BACK = 3,
-	ATBM_WLAN_CATEGORY_PUBLIC = 4,
-	ATBM_WLAN_CATEGORY_RADIO_MEASUREMENT = 5,
-	ATBM_WLAN_CATEGORY_HT = 7,
-	ATBM_WLAN_CATEGORY_SA_QUERY = 8,
-	ATBM_WLAN_CATEGORY_PROTECTED_DUAL_OF_ACTION = 9,
-	ATBM_WLAN_CATEGORY_WNM = 10,
-	ATBM_WLAN_CATEGORY_WNM_UNPROTECTED = 11,
-	ATBM_WLAN_CATEGORY_TDLS = 12,
-	ATBM_WLAN_CATEGORY_MESH_ACTION = 13,
-	ATBM_WLAN_CATEGORY_MULTIHOP_ACTION = 14,
-	ATBM_WLAN_CATEGORY_SELF_PROTECTED = 15,
-	ATBM_WLAN_CATEGORY_DMG = 16,
-	ATBM_WLAN_CATEGORY_WMM = 17,
-	ATBM_WLAN_CATEGORY_FST = 18,
-	ATBM_WLAN_CATEGORY_UNPROT_DMG = 20,
-	ATBM_WLAN_CATEGORY_VHT = 21,
-	ATBM_WLAN_CATEGORY_VENDOR_SPECIFIC_PROTECTED = 126,
-	ATBM_WLAN_CATEGORY_VENDOR_SPECIFIC = 127,
 };
 
 struct atbm_wpa_ie_data {
@@ -735,7 +698,7 @@ static inline bool ieee80211_is_public_action(struct ieee80211_hdr *hdr,
 		return false;
 	if (!ieee80211_is_action(hdr->frame_control))
 		return false;
-	return mgmt->u.action.category == ATBM_WLAN_CATEGORY_PUBLIC;
+	return mgmt->u.action.category == WLAN_CATEGORY_PUBLIC;
 }
 #endif
 
@@ -1525,7 +1488,6 @@ enum mac80211_rx_flags {
 	RX_FLAG_HW_CHKSUM_ERROR = 1<<12,
 	RX_FLAG_STA_LISTEN  = 1<<13,
 	RX_FLAG_UNKOWN_STA_FRAME = 1<<14,
-	RX_FLAG_AMPDU =	1<<15,
 };
 
 /**
@@ -2122,13 +2084,9 @@ enum ieee80211_scan_req_wrap_flags{
 	IEEE80211_SCAN_REQ_PASSIVE_SCAN    = 1<<3,
 	IEEE80211_SCAN_REQ_RESULTS_SKB     = 1<<4,
 	IEEE80211_SCAN_REQ_SPILT	   	   = 1<<5,
-	IEEE80211_SCAN_REQ_NEED_BSSID      = 1<<6,
-	IEEE80211_SCAN_REQ_ONLY_PROB       = 1<<7,
-	IEEE80211_SCAN_REQ_NEED_LISTEN	   = 1<<8,
 };
 struct ieee80211_scan_req_wrap{
 	struct cfg80211_scan_request *req;
-	u8 bssid[8];
 	u32 flags;
 	u8  cca_val[IEEE80211_ATBM_MAX_SCAN_CHANNEL_INDEX];
 };
@@ -3739,7 +3697,7 @@ struct sk_buff *ieee80211_qosnullfunc_get(struct ieee80211_hw *hw,
 struct sk_buff *ieee80211_probereq_get(struct ieee80211_hw *hw,
 				       struct ieee80211_vif *vif,
 				       const u8 *ssid, size_t ssid_len,
-				       const u8 *ie, size_t ie_len,u8 *bssid);
+				       const u8 *ie, size_t ie_len);
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
 /**
  * ieee80211_rts_get - RTS frame generation function
@@ -4109,7 +4067,7 @@ void ieee80211_iterate_active_interfaces_atomic(struct ieee80211_hw *hw,
  * @hw: the hardware struct for the interface we are adding work for
  * @work: the work we want to add onto the mac80211 workqueue
  */
-void ieee80211_queue_work(struct ieee80211_hw *hw, struct atbm_work_struct *work);
+void ieee80211_queue_work(struct ieee80211_hw *hw, struct work_struct *work);
 
 /**
  * ieee80211_queue_delayed_work - add work onto the mac80211 workqueue
@@ -4122,7 +4080,7 @@ void ieee80211_queue_work(struct ieee80211_hw *hw, struct atbm_work_struct *work
  * @delay: number of jiffies to wait before queueing
  */
 void ieee80211_queue_delayed_work(struct ieee80211_hw *hw,
-				  struct atbm_delayed_work *dwork,
+				  struct delayed_work *dwork,
 				  unsigned long delay);
 #ifdef CONFIG_ATBM_SW_AGGTX
 
@@ -4896,92 +4854,8 @@ action_check_end:
 }
 #endif
 #ifndef do_posix_clock_monotonic_gettime
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
-#define ktime_get_ts ktime_get_ts64
-#define timespec timespec64
-#endif
 #define do_posix_clock_monotonic_gettime(ts) ktime_get_ts(ts)
 #endif
-
-/*
-*atbm timer function
-*/
-struct atbm_timer_list {
-	struct timer_list timer;
-	void (*function)(unsigned long data);
-	unsigned long data;
-	unsigned long expires;
-};
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0))
-static inline void atbm_timer_handle(struct timer_list *in_timer)
-#else
-static inline void atbm_timer_handle(unsigned long data)
-#endif
-{
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0))
-	struct atbm_timer_list *atbm_timer = from_timer(atbm_timer, in_timer, timer);
-#else
-	struct atbm_timer_list *atbm_timer = (struct atbm_timer_list *)data;
-#endif
-	BUG_ON(atbm_timer->function == NULL);
-	atbm_timer->function(atbm_timer->data);
-}
-
-static inline void atbm_init_timer(struct atbm_timer_list *atbm_timer)
-{
-	atbm_timer->expires = 0;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0))
-	timer_setup(&atbm_timer->timer, atbm_timer_handle, 0);
-#else
-	/* setup_timer(ptimer, pfunc,(u32)cntx);	 */
-	atbm_timer->timer.function = atbm_timer_handle;
-	atbm_timer->timer.data = (unsigned long)atbm_timer;
-	init_timer(&atbm_timer->timer);
-#endif
-}
-
-static inline void atbm_setup_timer(struct atbm_timer_list *atbm_timer,
-				   void (*function)(unsigned long data),unsigned long data)
-{
-	atbm_timer->expires = 0;
-	atbm_timer->function = function;
-	atbm_timer->data = data;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0))
-	timer_setup(&atbm_timer->timer, atbm_timer_handle, 0);
-#else
-	
-	atbm_timer->timer.function = atbm_timer_handle;
-	atbm_timer->timer.data = (unsigned long)atbm_timer;
-	init_timer(&atbm_timer->timer);
-#endif
-}
-static inline int atbm_del_timer_sync(struct atbm_timer_list *atbm_timer)
-{
-	return del_timer_sync(&atbm_timer->timer);
-}
-static inline int atbm_mod_timer(struct atbm_timer_list *atbm_timer, unsigned long expires)
-{
-	int ret = 0;
-	ret =  mod_timer(&atbm_timer->timer,expires);
-	atbm_timer->expires = atbm_timer->timer.expires;
-
-	return ret;
-}
-
-static inline void atbm_add_timer(struct atbm_timer_list *atbm_timer)
-{
-	atbm_timer->timer.expires = atbm_timer->expires;
-	add_timer(&atbm_timer->timer);
-}
-
-static inline int atbm_del_timer(struct atbm_timer_list *atbm_timer)
-{
-	return del_timer(&atbm_timer->timer);
-}
-static inline int atbm_timer_pending(struct atbm_timer_list *atbm_timer)
-{
-	return timer_pending(&atbm_timer->timer);
-}
 extern struct cfg80211_bss *ieee80211_atbm_get_bss(struct wiphy *wiphy,
 				      struct ieee80211_channel *channel,
 				      const u8 *bssid,
@@ -5002,8 +4876,6 @@ extern struct cfg80211_bss *__ieee80211_atbm_get_authen_bss(struct ieee80211_vif
 				      const u8 *bssid,
 				      const u8 *ssid, size_t ssid_len);
 extern char *ieee80211_alloc_name(struct ieee80211_hw *hw,const char *name);
-extern bool atbm_ieee80211_is_robust_mgmt_frame(struct sk_buff *skb);
-
 
 #define IEEE80211_CHANNLE_SPECIAL_FREQ_FLAG				BIT(15)
 #define IEEE80211_CHANNLE_CCA_RUNNING_FLAG				BIT(14)
@@ -5193,51 +5065,30 @@ static inline u8 ieee80211_rssi_weight(s8 signal)
 #define ATBM_MAX_SCAN_PRIVATE_IE_LEN				(255-4)
 #define ATBM_MAX_SCAN_CHANNEL						(14+4)
 
-//0
-
-//1
 #define ATBM_PRINTK_MASK_ERR			BIT(0)
 #define ATBM_PRINTK_MASK_WARN			BIT(1)
 #define ATBM_PRINTK_MASK_INIT			BIT(2)
 #define ATBM_PRINTK_MASK_EXIT			BIT(3)
+#define ATBM_PRINTK_MASK_BUS			BIT(4)
 #define ATBM_PRINTK_MASK_SCAN			BIT(5)
-#define ATBM_PRINTK_MASK_LMAC			BIT(8)
-#define ATBM_PRINTK_MASK_WEXT			BIT(13)
-#define ATBM_PRINTK_MASK_PM				BIT(16)
-
-//2
 #define ATBM_PRINTK_MASK_P2P			BIT(6)
 #define ATBM_PRINTK_MASK_MGMT			BIT(7)
+#define ATBM_PRINTK_MASK_LMAC			BIT(8)
+#define ATBM_PRINTK_MASK_AGG			BIT(9)
 #define ATBM_PRINTK_MASK_AP				BIT(10)
 #define ATBM_PRINTK_MASK_STA			BIT(11)
-#define ATBM_PRINTK_MASK_CFG80211		BIT(19)
-#define ATBM_PRINTK_MASK_PLATFROM		BIT(17)
-
-//3
-#define ATBM_PRINTK_MASK_BH				BIT(18)
+#define ATBM_PRINTK_MASK_SMARTCONFIG	BIT(12)
+#define ATBM_PRINTK_MASK_WEXT			BIT(13)
 #define ATBM_PRINTK_MASK_TX				BIT(14)
 #define ATBM_PRINTK_MASK_RX				BIT(15)
-#define ATBM_PRINTK_MASK_AGG			BIT(9)
-#define ATBM_PRINTK_MASK_WSM			BIT(21)
-
-//4
-#define ATBM_PRINTK_MASK_BUS			BIT(4)
+#define ATBM_PRINTK_MASK_PM				BIT(16)
+#define ATBM_PRINTK_MASK_PLATFROM		BIT(17)
+#define ATBM_PRINTK_MASK_BH				BIT(18)
+#define ATBM_PRINTK_MASK_CFG80211		BIT(19)
 #define ATBM_PRINTK_MASK_DEBUG			BIT(20)
-#define ATBM_PRINTK_MASK_SMARTCONFIG	BIT(12)
 
-#define ATBM_PRINTK_LEVEL1	(ATBM_PRINTK_MASK_ERR|ATBM_PRINTK_MASK_WARN|ATBM_PRINTK_MASK_INIT| \
-									ATBM_PRINTK_MASK_EXIT|ATBM_PRINTK_MASK_SCAN|ATBM_PRINTK_MASK_LMAC| \
-									ATBM_PRINTK_MASK_PM | ATBM_PRINTK_MASK_WEXT)
-#define ATBM_PRINTK_LEVEL2	(ATBM_PRINTK_LEVEL1 | ATBM_PRINTK_MASK_P2P | ATBM_PRINTK_MASK_MGMT | ATBM_PRINTK_MASK_AP | \
-									ATBM_PRINTK_MASK_STA | ATBM_PRINTK_MASK_CFG80211 | ATBM_PRINTK_MASK_PLATFROM)
-										
-#define ATBM_PRINTK_LEVEL3	(ATBM_PRINTK_LEVEL2 | ATBM_PRINTK_MASK_BH | ATBM_PRINTK_MASK_TX | ATBM_PRINTK_MASK_RX | \
-									ATBM_PRINTK_MASK_AGG | ATBM_PRINTK_MASK_WSM)
-#define ATBM_PRINTK_LEVEL4	(ATBM_PRINTK_LEVEL3 | ATBM_PRINTK_MASK_BUS | ATBM_PRINTK_MASK_DEBUG | ATBM_PRINTK_MASK_SMARTCONFIG)
-
-
-#define ATBM_PRINTK_DEFAULT_MASK ATBM_PRINTK_LEVEL1
-
+#define ATBM_PRINTK_DEFAULT_MASK	(ATBM_PRINTK_MASK_ERR|ATBM_PRINTK_MASK_WARN|ATBM_PRINTK_MASK_INIT| ATBM_PRINTK_MASK_PLATFROM | \
+									ATBM_PRINTK_MASK_EXIT|ATBM_PRINTK_MASK_SCAN|ATBM_PRINTK_MASK_LMAC|ATBM_PRINTK_MASK_PM)
 extern const char *atbm_log;
 
 #ifdef CONFIG_ATBM_MOULE_FS
@@ -5275,11 +5126,8 @@ extern u32 atbm_printk_mask;
 #define atbm_printk_platform(...)	atbm_printk(ATBM_PRINTK_MASK_PLATFROM,__VA_ARGS__)
 #define atbm_printk_bh(...)			atbm_printk(ATBM_PRINTK_MASK_BH,__VA_ARGS__)
 #define atbm_printk_cfg(...)		atbm_printk(ATBM_PRINTK_MASK_CFG80211,__VA_ARGS__)
-#define atbm_printk_wsm(...)		atbm_printk(ATBM_PRINTK_MASK_WSM,__VA_ARGS__)
-
 #define atbm_printk_debug(...)		atbm_printk(ATBM_PRINTK_MASK_DEBUG,__VA_ARGS__)
-								
-#define atbm_printk_always(fmt,arg...)		printk(KERN_ERR "%s" fmt,atbm_log,##arg)
+#define atbm_printk_always(fmt,arg...)		printk(KERN_ERR ATBM_TAG fmt,##arg)
 
 
 #define ATBM_MAC2STR(a) (a)[0], (a)[1], (a)[2], (a)[3], (a)[4], (a)[5]

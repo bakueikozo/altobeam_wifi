@@ -139,8 +139,8 @@ static void ieee80211_handle_filtered_frame(struct ieee80211_local *local,
 		atbm_skb_queue_tail(&sta->tx_filtered[ac], skb);
 		sta_info_recalc_tim(sta);
 
-		if (!atbm_timer_pending(&local->sta_cleanup))
-			atbm_mod_timer(&local->sta_cleanup,
+		if (!timer_pending(&local->sta_cleanup))
+			mod_timer(&local->sta_cleanup,
 				  round_jiffies(jiffies +
 						STA_INFO_CLEANUP_INTERVAL));
 		return;
@@ -211,7 +211,7 @@ static void ieee80211_frame_acked(struct sta_info *sta, struct sk_buff *skb)
 #ifdef CONFIG_ATBM_SMPS
 	if (ieee80211_is_action(mgmt->frame_control) &&
 	    sdata->vif.type == NL80211_IFTYPE_STATION &&
-	    mgmt->u.action.category == ATBM_WLAN_CATEGORY_HT &&
+	    mgmt->u.action.category == WLAN_CATEGORY_HT &&
 	    mgmt->u.action.u.ht_smps.action == WLAN_HT_ACTION_SMPS) {
 		/*
 		 * This update looks racy, but isn't -- if we come
@@ -473,10 +473,9 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 					buffed_info->flags |= IEEE80211_TX_INTFL_NEED_TXPROCESSING;
 					ieee80211_add_pending_skb(local, buffed_skb);
 				}
-				if(acked){
+				if(acked)
 					atbm_printk_mgmt("%s:4/4 Pairwise Succeed\n",sta->sdata->name);
-					
-				}else {
+				else {
 					atbm_printk_err("%s:4/4 Pairwise Failed\n",sta->sdata->name);
 					/*
 					*Here Maybe needed deauthen
@@ -568,7 +567,7 @@ void ieee80211_tx_status(struct ieee80211_hw *hw, struct sk_buff *skb)
 		if (info->flags & IEEE80211_TX_STAT_ACK)
 			sdata->u.mgd.flags |= IEEE80211_STA_NULLFUNC_ACKED;
 		else
-			atbm_mod_timer(&sdata->dynamic_ps_timer, jiffies +
+			mod_timer(&sdata->dynamic_ps_timer, jiffies +
 					msecs_to_jiffies(10));
 	}
 #endif

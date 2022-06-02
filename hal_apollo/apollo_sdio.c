@@ -49,9 +49,6 @@ struct build_info{
 	int dpll;
 	char driver_info[64];
 };
-#define __PRINT_VALUE(x) #x
-#define PRINT_VALUE(x) #x"="__PRINT_VALUE(x)
-
 #ifdef CONFIG_ATBM_SUPPORT_SG
 #pragma message("Support Network SG")
 #endif
@@ -59,38 +56,6 @@ struct build_info{
 #ifdef CONFIG_TX_NO_CONFIRM
 #pragma message("Tx No Confirm")
 #endif
-
-#ifdef CONFIG_MODDRVNAME
-#define WIFI_MODDRVNAME CONFIG_MODDRVNAME
-#pragma message(WIFI_MODDRVNAME)
-
-#else
-#define WIFI_MODDRVNAME "atbm_wlan"
-#endif
-#ifdef CONFIG_SDIOVID
-#define WIFI_SDIO_VID CONFIG_SDIOVID
-#pragma message(PRINT_VALUE(WIFI_SDIO_VID))
-#else
-#define WIFI_SDIO_VID 0x007a
-#endif
-
-#ifdef CONFIG_SDIOPID
-#define WIFI_SDIO_PID CONFIG_SDIOPID
-#pragma message(PRINT_VALUE(WIFI_SDIO_PID))
-
-#else
-#define WIFI_SDIO_PID 0x6011
-#endif
-
-#ifdef CONFIG_PLFDEVNAME
-#define WIFI_PLFDEVNAME CONFIG_PLFDEVNAME
-#pragma message(WIFI_PLFDEVNAME)
-
-#else
-#define WIFI_PLFDEVNAME "atbm_dev_wifi"
-#endif
-
-
 extern int atbm_bh_read_ctrl_reg_unlock(struct atbm_common *hw_priv,
 					  u16 *ctrl_reg);
 static void atbm_sdio_release_err_cmd(struct atbm_common	*hw_priv);
@@ -176,7 +141,7 @@ struct sbus_wtd {
 	atomic_t				wtd_probe;
 };
 static const struct sdio_device_id atbm_sdio_ids[] = {
-	{ SDIO_DEVICE(WIFI_SDIO_VID, WIFI_SDIO_PID) },
+	{ SDIO_DEVICE(SDIO_ANY_ID, SDIO_ANY_ID) },
 	{ /* end: all zeroes */			},
 };
 
@@ -393,11 +358,7 @@ static int atbm_sdio_rx_thread(void *priv)
 	/*
 	*the policy of the sheduler is same with the sdio irq thread
 	*/
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(5, 9, 0))
-        sched_set_fifo(current);
-#else
-        sched_setscheduler(current, SCHED_FIFO, &param);
-#endif
+	sched_setscheduler(current, SCHED_FIFO, &param);
 	
 	while(!atbm_sdio_wait_action(&self->rx_thread)){
 		atbm_sdio_rx_bh(self->core);
@@ -412,21 +373,14 @@ static int atbm_sdio_tx_period(struct atbm_sdio_thread *thread)
 static int atbm_sdio_tx_thread(void *priv)
 {
 	struct sbus_priv *self = (struct sbus_priv *)priv;
-#ifdef CONFIG_ATBM_SDIO_TX_THREAD_FIFO
-
 #ifdef CONFIG_ATBM_SDIO_SMP
 	struct sched_param param = { .sched_priority = 1 };
 #else
 	struct sched_param param = { .sched_priority = 2 };
 #endif
-
 	atbm_printk_init("%s\n",__func__);
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(5, 9, 0))
-        sched_set_fifo(current);
-#else
-        sched_setscheduler(current, SCHED_FIFO, &param);
-#endif
-#endif
+	sched_setscheduler(current, SCHED_FIFO, &param);
+		
 	while(!atbm_sdio_wait_action(&self->tx_thread)){
 #ifdef CONFIG_ATBM_SDIO_TX_HOLD	
 		atbm_sdio_lock(self);
@@ -619,48 +573,7 @@ static int atbm_sdio_memcpy_toio(struct sbus_priv *self,
 	return sdio_memcpy_toio(self->func, addr, (void *)src, count);
 }
 
-static int atbm_sdio_read_sync(struct sbus_priv *self,
-				     unsigned int addr,
-				     void *dst, int count)
-{
-	int ret = -EINVAL;
-	
-	switch(count){
-	case sizeof(u16):
-		*(u16 *)dst = sdio_readw(self->func, addr, &ret);		
-		break;
-	case sizeof(u32):
-		*(u32 *)dst = sdio_readl(self->func, addr, &ret);
-		break;
-	default:
-		WARN_ON(count == 8);
-		ret = atbm_sdio_memcpy_fromio(self,addr,dst,count);
-	}
-	
-	return ret;
-}
 
-static int atbm_sdio_write_sync(struct sbus_priv *self,
-				   unsigned int addr,
-				   const void *src, int count)
-{
-	int ret = -EINVAL;
-
-	switch(count){
-	case sizeof(u16):
-		sdio_writew(self->func, *(u16 *)src, addr, &ret);
-		break;
-	case sizeof(u32):
-		sdio_writel(self->func, *(u32 *)src, addr, &ret);
-		break;
-	default:
-		WARN_ON(count == 8);
-		ret = atbm_sdio_memcpy_toio(self,addr,src,count);
-		break;
-	}
-
-	return ret;
-}
 int atbm_readb_func0(struct sbus_priv *self,
 						 unsigned int addr,int *ret_err)
 {
@@ -880,7 +793,7 @@ static int atbm_detect_card(const struct atbm_platform_data *pdata)
 	static struct platform_device *sdio_platform_dev = NULL;
 	int status = 0;
 	
-	sdio_platform_dev = platform_device_alloc(WIFI_PLFDEVNAME,0);
+	sdio_platform_dev = platform_device_alloc("atbmsdiowifi",0);
 	if(sdio_platform_dev == NULL){
 		status = -ENOMEM;
 		goto platform_dev_err;
@@ -1066,21 +979,7 @@ static u32 atbm_sdio_align_size(struct sbus_priv *self, u32 size)
 
 int atbm_sdio_set_block_size(struct sbus_priv *self, u32 size)
 {
-	//return sdio_set_block_size(self->func, size);
-	 u32 retries = 0;
-	 int ret = 0;
-	 do{
-		  ret = sdio_set_block_size(self->func, size);
-
-		  if(ret == 0){
-		   	break;
-		  }
-		  retries ++;
-
-		  atbm_printk_err("%s: set block size err(%d)\n",__func__,retries);
-	 }while(retries <= 10);
-	 
- 	return ret;
+	return sdio_set_block_size(self->func, size);
 }
 
 static int atbm_sdio_pm(struct sbus_priv *self, bool  suspend)
@@ -1102,6 +1001,7 @@ void atbm_wtd_wakeup( struct sbus_priv *self)
 	wake_up(&self->wtd->wtd_evt_wq);
 #endif //CONFIG_ATBMWIFI_WDT
 }
+#ifdef CONFIG_ATBMWIFI_WDT
 static int atbm_wtd_process(void *arg)
 {
 #ifdef CONFIG_ATBMWIFI_WDT
@@ -1132,6 +1032,8 @@ __stop:
 #endif //CONFIG_ATBMWIFI_WDT
 	return 0;
 }
+#endif
+
 static void atbm_wtd_init(void)
 {
 #ifdef CONFIG_ATBMWIFI_WDT
@@ -1145,13 +1047,8 @@ static void atbm_wtd_init(void)
 	if (IS_ERR(g_wtd.wtd_thread)) {
 		g_wtd.wtd_thread = NULL;
 	} else {
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(5, 9, 0))
-        sched_set_fifo_low(g_wtd.wtd_thread);
-#else
-	WARN_ON(sched_setscheduler(g_wtd.wtd_thread,
+		WARN_ON(sched_setscheduler(g_wtd.wtd_thread,
 			SCHED_FIFO, &param));
-#endif
-
 #ifdef HAS_PUT_TASK_STRUCT
 		get_task_struct(g_wtd.wtd_thread);
 #endif
@@ -1429,8 +1326,8 @@ static int atbm_sdio_lmac_restart(struct sbus_priv *self)
 static struct sbus_ops atbm_sdio_sbus_ops = {
 	.sbus_memcpy_fromio	= atbm_sdio_memcpy_fromio,
 	.sbus_memcpy_toio	= atbm_sdio_memcpy_toio,
-	.sbus_read_sync 	= atbm_sdio_read_sync,//atbm_sdio_memcpy_fromio,
-	.sbus_write_sync	= atbm_sdio_write_sync,//atbm_sdio_memcpy_toio,
+	.sbus_read_sync 	= atbm_sdio_memcpy_fromio,
+	.sbus_write_sync	= atbm_sdio_memcpy_toio,
 	.lock				= atbm_sdio_lock,
 	.unlock				= atbm_sdio_unlock,
 	.irq_subscribe		= atbm_sdio_irq_subscribe,
@@ -1537,7 +1434,6 @@ static void atbm_sdio_disconnect(struct sdio_func *func)
 			self->core = NULL;
 		}
 		sdio_claim_host(func);
-#if 0
 		/*
 		*	reset sdio
 		*/
@@ -1560,7 +1456,6 @@ static void atbm_sdio_disconnect(struct sdio_func *func)
 
 			/**********************/
 		}
-#endif
 		sdio_disable_func(func);
 		sdio_release_host(func);
 		sdio_set_drvdata(func, NULL);
@@ -1639,7 +1534,7 @@ static const struct dev_pm_ops atbm_pm_ops = {
 };
 
 static struct sdio_driver sdio_driver = {
-	.name		= WIFI_MODDRVNAME,
+	.name		= "atbm_wlan",
 	.id_table	= atbm_sdio_ids,
 	.probe		= atbm_sdio_probe,
 	.remove		= atbm_sdio_disconnect,
@@ -1753,10 +1648,7 @@ static int __init apollo_sdio_module_init(void)
 {
 	ieee80211_atbm_mem_int();
 	ieee80211_atbm_skb_int();
-	atbm_wq_init();
-#ifdef ANDROID
 	register_reboot_notifier(&atbm_reboot_nb);
-#endif
 	atbm_init_firmware();
 	atbm_ieee80211_init();
 	atbm_module_attribute_init();
@@ -1769,11 +1661,8 @@ static void  apollo_sdio_module_exit(void)
 	atbm_sdio_exit();
 	atbm_ieee80211_exit();
 	atbm_release_firmware();
-#ifdef ANDROID
 	unregister_reboot_notifier(&atbm_reboot_nb);
-#endif
 	atbm_module_attribute_exit();
-	atbm_wq_exit();
 	ieee80211_atbm_mem_exit();
 	ieee80211_atbm_skb_exit();
 }

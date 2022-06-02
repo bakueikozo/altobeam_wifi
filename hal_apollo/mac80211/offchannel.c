@@ -36,7 +36,7 @@ static void ieee80211_offchannel_ps_enable(struct ieee80211_sub_if_data *sdata)
 	del_timer_sync(&ifmgd->bcn_mon_timer);
 	del_timer_sync(&ifmgd->conn_mon_timer);
 
-	atbm_cancel_work_sync(&sdata->dynamic_ps_enable_work);
+	cancel_work_sync(&sdata->dynamic_ps_enable_work);
 
 	if (sdata->vif.bss_conf.ps_enabled) {
 		sdata->offchannel_ps_enabled = true;
@@ -249,7 +249,7 @@ void ieee80211_handle_roc_started(struct ieee80211_roc_work *roc)
 	roc->notified = true;
 }
 
-static void ieee80211_hw_roc_start(struct atbm_work_struct *work)
+static void ieee80211_hw_roc_start(struct work_struct *work)
 {
 	struct ieee80211_local *local =
 		container_of(work, struct ieee80211_local, hw_roc_start);
@@ -411,7 +411,7 @@ void ieee80211_roc_notify_destroy(struct ieee80211_roc_work *roc)
 	atbm_kfree(roc);
 }
 
-void ieee80211_sw_roc_work(struct atbm_work_struct *work)
+void ieee80211_sw_roc_work(struct work_struct *work)
 {
 	struct ieee80211_roc_work *roc =
 		container_of(work, struct ieee80211_roc_work, work.work);
@@ -481,7 +481,7 @@ void ieee80211_sw_roc_work(struct atbm_work_struct *work)
 	mutex_unlock(&local->mtx);
 }
 
-static void ieee80211_hw_roc_done(struct atbm_work_struct *work)
+static void ieee80211_hw_roc_done(struct work_struct *work)
 {
 	struct ieee80211_local *local =
 		container_of(work, struct ieee80211_local, hw_roc_done);
@@ -532,8 +532,8 @@ void ieee80211_remain_on_channel_expired(struct ieee80211_hw *hw, u64 cookie)
 //EXPORT_SYMBOL_GPL(ieee80211_remain_on_channel_expired);
 void ieee80211_hw_roc_setup(struct ieee80211_local *local)
 {
-	ATBM_INIT_WORK(&local->hw_roc_start, ieee80211_hw_roc_start);
-	ATBM_INIT_WORK(&local->hw_roc_done, ieee80211_hw_roc_done);
+	INIT_WORK(&local->hw_roc_start, ieee80211_hw_roc_start);
+	INIT_WORK(&local->hw_roc_done, ieee80211_hw_roc_done);
 	INIT_LIST_HEAD(&local->roc_list);
 }
 
@@ -577,7 +577,7 @@ void ieee80211_roc_purge(struct ieee80211_sub_if_data *sdata)
 			ieee80211_queue_delayed_work(&local->hw, &roc->work, 0);
 
 			/* work will clean up etc */
-			atbm_flush_delayed_work(&roc->work);
+			flush_delayed_work(&roc->work);
 		}
 	}
 

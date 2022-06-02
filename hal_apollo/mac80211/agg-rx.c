@@ -87,8 +87,8 @@ void ___ieee80211_stop_rx_ba_session(struct sta_info *sta, u16 tid,
 		ieee80211_send_delba(sta->sdata, sta->sta.addr,
 				     tid, 0, reason);
 #endif
-	atbm_del_timer_sync(&tid_rx->session_timer);
-	atbm_del_timer_sync(&tid_rx->reorder_timer);
+	del_timer_sync(&tid_rx->session_timer);
+	del_timer_sync(&tid_rx->reorder_timer);
 
 	call_rcu(&tid_rx->rcu_head, ieee80211_free_tid_rx);
 }
@@ -186,7 +186,7 @@ static void ieee80211_send_addba_resp(struct ieee80211_sub_if_data *sdata, u8 *d
 					  IEEE80211_STYPE_ACTION);
 
 	atbm_skb_put(skb, 1 + sizeof(mgmt->u.action.u.addba_resp));
-	mgmt->u.action.category = ATBM_WLAN_CATEGORY_BACK;
+	mgmt->u.action.category = WLAN_CATEGORY_BACK;
 	mgmt->u.action.u.addba_resp.action_code = WLAN_ACTION_ADDBA_RESP;
 	mgmt->u.action.u.addba_resp.dialog_token = dialog_token;
 
@@ -242,7 +242,7 @@ void ieee80211_process_addba_request(struct ieee80211_local *local,
 	/* XXX: check own ht delayed BA capability?? */
 	if (((ba_policy != 1) &&
 	     (!(sta->sta.ht_cap.cap & IEEE80211_HT_CAP_DELAY_BA))) ||
-	    (buf_size > 64/*IEEE80211_MAX_AMPDU_BUF*/)) {
+	    (buf_size > IEEE80211_MAX_AMPDU_BUF)) {
 #ifdef CONFIG_ATBM_DRIVER_PROCESS_BA
 
 		status = WLAN_STATUS_INVALID_QOS_PARAM;
@@ -258,7 +258,7 @@ void ieee80211_process_addba_request(struct ieee80211_local *local,
 	}
 	/* determine default buffer size */
 	if (buf_size == 0)
-		buf_size = 64;//IEEE80211_MAX_AMPDU_BUF;
+		buf_size = IEEE80211_MAX_AMPDU_BUF;
 
 	/* make sure the size doesn't exceed the maximum supported by the hw */
 	if (buf_size > local->hw.max_rx_aggregation_subframes)
@@ -285,18 +285,18 @@ void ieee80211_process_addba_request(struct ieee80211_local *local,
 	tid_agg_rx = atbm_kmalloc(sizeof(struct tid_ampdu_rx), GFP_KERNEL);
 	if (!tid_agg_rx)
 		goto end;
-	atbm_printk_init("%s:mac[%pM],tid[%d]\n",__func__,sta->sta.addr,tid);
+
 	spin_lock_init(&tid_agg_rx->reorder_lock);
 
 	/* rx timer */
 	tid_agg_rx->session_timer.function = sta_rx_agg_session_timer_expired;
 	tid_agg_rx->session_timer.data = (unsigned long)&sta->timer_to_tid[tid];
-	atbm_init_timer(&tid_agg_rx->session_timer);
+	init_timer(&tid_agg_rx->session_timer);
 
 	/* rx reorder timer */
 	tid_agg_rx->reorder_timer.function = sta_rx_agg_reorder_timer_expired;
 	tid_agg_rx->reorder_timer.data = (unsigned long)&sta->timer_to_tid[tid];
-	atbm_init_timer(&tid_agg_rx->reorder_timer);
+	init_timer(&tid_agg_rx->reorder_timer);
 
 	/* prepare reordering buffer */
 	tid_agg_rx->reorder_buf =
@@ -337,7 +337,7 @@ void ieee80211_process_addba_request(struct ieee80211_local *local,
 	rcu_assign_pointer(sta->ampdu_mlme.tid_rx[tid], tid_agg_rx);
 
 	if (timeout)
-		atbm_mod_timer(&tid_agg_rx->session_timer, TU_TO_EXP_TIME(timeout));
+		mod_timer(&tid_agg_rx->session_timer, TU_TO_EXP_TIME(timeout));
 
 end:
 	mutex_unlock(&sta->ampdu_mlme.mtx);

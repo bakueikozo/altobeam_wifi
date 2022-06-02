@@ -58,7 +58,7 @@ static void ieee80211_rx_mgmt_auth_ibss(struct ieee80211_sub_if_data *sdata,
 	 * has actually implemented this.
 	 */
 	if (auth_alg == WLAN_AUTH_OPEN && auth_transaction == 1)
-		ieee80211_send_auth(sdata, 2, WLAN_AUTH_OPEN, 0, NULL, 0,
+		ieee80211_send_auth(sdata, 2, WLAN_AUTH_OPEN, NULL, 0,
 				    sdata->u.ibss.bssid, NULL, 0, 0);
 }
 
@@ -207,7 +207,7 @@ static void __ieee80211_sta_join_ibss(struct ieee80211_sub_if_data *sdata,
 	ieee80211_sta_def_wmm_params(sdata, sband->n_bitrates, supp_rates);
 
 	ifibss->state = IEEE80211_IBSS_MLME_JOINED;
-	atbm_mod_timer(&ifibss->timer,
+	mod_timer(&ifibss->timer,
 		  round_jiffies(jiffies + IEEE80211_IBSS_MERGE_INTERVAL));
 
 	//bss = cfg80211_inform_bss_frame(local->hw.wiphy, chan_state->conf.channel,
@@ -533,7 +533,7 @@ static void ieee80211_sta_merge_ibss(struct ieee80211_sub_if_data *sdata)
 
 	lockdep_assert_held(&ifibss->mtx);
 
-	atbm_mod_timer(&ifibss->timer,
+	mod_timer(&ifibss->timer,
 		  round_jiffies(jiffies + IEEE80211_IBSS_MERGE_INTERVAL));
 
 	ieee80211_sta_expire(sdata, IEEE80211_IBSS_INACTIVITY_LIMIT);
@@ -684,7 +684,7 @@ static void ieee80211_sta_find_ibss(struct ieee80211_sub_if_data *sdata)
 			interval = IEEE80211_SCAN_INTERVAL_SLOW;
 		}
 
-		atbm_mod_timer(&ifibss->timer,
+		mod_timer(&ifibss->timer,
 			  round_jiffies(jiffies + interval));
 	}
 }
@@ -885,7 +885,7 @@ void ieee80211_ibss_quiesce(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
 
-	if (atbm_del_timer_sync(&ifibss->timer))
+	if (del_timer_sync(&ifibss->timer))
 		ifibss->timer_running = true;
 }
 
@@ -894,7 +894,7 @@ void ieee80211_ibss_restart(struct ieee80211_sub_if_data *sdata)
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
 
 	if (ifibss->timer_running) {
-		atbm_add_timer(&ifibss->timer);
+		add_timer(&ifibss->timer);
 		ifibss->timer_running = false;
 	}
 }
@@ -904,7 +904,7 @@ void ieee80211_ibss_setup_sdata(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
 
-	atbm_setup_timer(&ifibss->timer, ieee80211_ibss_timer,
+	setup_timer(&ifibss->timer, ieee80211_ibss_timer,
 		    (unsigned long) sdata);
 	mutex_init(&ifibss->mtx);
 }
@@ -1050,7 +1050,7 @@ int ieee80211_ibss_leave(struct ieee80211_sub_if_data *sdata)
 
 	atbm_skb_queue_purge(&sdata->skb_queue);
 
-	atbm_del_timer_sync(&sdata->u.ibss.timer);
+	del_timer_sync(&sdata->u.ibss.timer);
 
 	mutex_unlock(&sdata->u.ibss.mtx);
 

@@ -143,7 +143,7 @@ void ieee80211_sta_tear_down_BA_sessions(struct sta_info *sta, bool tx)
 {
 	int i;
 
-	atbm_cancel_work_sync(&sta->ampdu_mlme.work);
+	cancel_work_sync(&sta->ampdu_mlme.work);
 
 	for (i = 0; i <  STA_TID_NUM; i++) {
 #ifdef CONFIG_ATBM_SW_AGGTX
@@ -154,7 +154,7 @@ void ieee80211_sta_tear_down_BA_sessions(struct sta_info *sta, bool tx)
 	}
 }
 
-void ieee80211_ba_session_work(struct atbm_work_struct *work)
+void ieee80211_ba_session_work(struct work_struct *work)
 {
 	struct sta_info *sta =
 		container_of(work, struct sta_info, ampdu_mlme.work);
@@ -245,7 +245,7 @@ void ieee80211_send_delba(struct ieee80211_sub_if_data *sdata,
 
 	atbm_skb_put(skb, 1 + sizeof(mgmt->u.action.u.delba));
 
-	mgmt->u.action.category = ATBM_WLAN_CATEGORY_BACK;
+	mgmt->u.action.category = WLAN_CATEGORY_BACK;
 	mgmt->u.action.u.delba.action_code = WLAN_ACTION_DELBA;
 	params = (u16)(initiator << 11); 	/* bit 11 initiator */
 	params |= (u16)(tid << 12); 		/* bit 15:12 TID number */
@@ -304,7 +304,7 @@ int ieee80211_send_smps_action(struct ieee80211_sub_if_data *sdata,
 	memcpy(action_frame->bssid, bssid, ETH_ALEN);
 	action_frame->frame_control = cpu_to_le16(IEEE80211_FTYPE_MGMT |
 						  IEEE80211_STYPE_ACTION);
-	action_frame->u.action.category = ATBM_WLAN_CATEGORY_HT;
+	action_frame->u.action.category = WLAN_CATEGORY_HT;
 	action_frame->u.action.u.ht_smps.action = WLAN_HT_ACTION_SMPS;
 	switch (smps) {
 	case IEEE80211_SMPS_AUTOMATIC:
@@ -331,7 +331,7 @@ int ieee80211_send_smps_action(struct ieee80211_sub_if_data *sdata,
 	return 0;
 }
 
-void ieee80211_request_smps_work(struct atbm_work_struct *work)
+void ieee80211_request_smps_work(struct work_struct *work)
 {
 	struct ieee80211_sub_if_data *sdata =
 		container_of(work, struct ieee80211_sub_if_data,

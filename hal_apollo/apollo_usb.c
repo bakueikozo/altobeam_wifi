@@ -44,7 +44,6 @@
 #include "bh.h"
 #include "svn_version.h"
 #include "module_fs.h"
-#include "internal_cmd.h"
 
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 #ifdef ATBM_PM_USE_EARLYSUSPEND
@@ -261,6 +260,8 @@ static int driver_build_info(void)
 	build.dpll=DPLL_CLOCK;
 	memcpy(build.driver_info,(void*)DRIVER_INFO,sizeof(DRIVER_INFO));
 	atbm_printk_init("SVN_VER=%d,DPLL_CLOCK=%d,BUILD_TIME=%s\n",build.ver,build.dpll,build.driver_info);
+	atbm_printk_init("SVN URL %s \n",SVN_URL);
+	atbm_printk_init("COMPILE DATA %s \n",COMPILER_DATA);
 	return 0;
 }
 int G_tx_urb=0;
@@ -368,10 +369,10 @@ struct sbus_priv {
 	struct tasklet_struct tx_cmp_tasklet;
 	struct tasklet_struct rx_cmp_tasklet;
 #else
-	struct atbm_workqueue_struct 	*tx_workqueue;
-	struct atbm_workqueue_struct 	*rx_workqueue;
-	struct atbm_work_struct rx_complete_work;
-	struct atbm_work_struct tx_complete_work;
+	struct workqueue_struct 	*tx_workqueue;
+	struct workqueue_struct 	*rx_workqueue;
+	struct work_struct rx_complete_work;
+	struct work_struct tx_complete_work;
 #endif
 	bool            rx_running;
 	void 			*tx_data;
@@ -446,14 +447,14 @@ extern void atbm_rx_tasklet(unsigned long priv);
 
 #ifndef USB_USE_TASTLET_TXRX
 
-void atbm_tx_complete_work(struct atbm_work_struct *work)
+void atbm_tx_complete_work(struct work_struct *work)
 {
 	struct sbus_priv *self =
 			container_of(work, struct sbus_priv , tx_complete_work);
 	atbm_tx_tasklet((unsigned long)self->core);
 }
 
-void atbm_rx_complete_work(struct atbm_work_struct *work)
+void atbm_rx_complete_work(struct work_struct *work)
 {
 	struct sbus_priv *self =
 			container_of(work, struct sbus_priv , rx_complete_work);
@@ -470,8 +471,8 @@ static int atbm_usb_xmit_init(struct sbus_priv *self)
 #else
 	struct atbm_common *hw_priv = self->core;
 	atbm_printk_init("atbmwifi INIT_WORK enable\n");
-	ATBM_INIT_WORK(&self->tx_complete_work, atbm_tx_complete_work);
-	self->tx_workqueue= atbm_create_singlethread_workqueue(ieee80211_alloc_name(hw_priv->hw,"tx_workqueue")/*"tx_workqueue"*/);
+	INIT_WORK(&self->tx_complete_work, atbm_tx_complete_work);
+	self->tx_workqueue= create_singlethread_workqueue(ieee80211_alloc_name(hw_priv->hw,"tx_workqueue")/*"tx_workqueue"*/);
 
 	if(self->tx_workqueue == NULL)
 		return -1;
@@ -486,8 +487,8 @@ static int atbm_usb_xmit_deinit(struct sbus_priv *self)
 	tasklet_kill(&self->tx_cmp_tasklet);
 #else
 	if(self->tx_workqueue){
-		atbm_flush_workqueue(self->tx_workqueue);
-		atbm_destroy_workqueue(self->tx_workqueue);
+		flush_workqueue(self->tx_workqueue);
+		destroy_workqueue(self->tx_workqueue);
 	}
 	self->tx_workqueue = NULL;	
 #endif
@@ -501,8 +502,8 @@ static int atbm_usb_rev_init(struct sbus_priv *self)
 #else
 	struct atbm_common *hw_priv = self->core;
 	atbm_printk_init("atbmwifi INIT_WORK enable\n");
-	ATBM_INIT_WORK(&self->rx_complete_work, atbm_rx_complete_work);
-	self->rx_workqueue= atbm_create_singlethread_workqueue(ieee80211_alloc_name(hw_priv->hw,"rx_workqueue")/*"rx_workqueue"*/);
+	INIT_WORK(&self->rx_complete_work, atbm_rx_complete_work);
+	self->rx_workqueue= create_singlethread_workqueue(ieee80211_alloc_name(hw_priv->hw,"rx_workqueue")/*"rx_workqueue"*/);
 	if(self->rx_workqueue == NULL)
 		return -1;
 #endif
@@ -516,8 +517,8 @@ static int atbm_usb_rev_deinit(struct sbus_priv *self)
 	tasklet_kill(&self->rx_cmp_tasklet); 
 #else
 	if(self->rx_workqueue){
-		atbm_flush_workqueue(self->rx_workqueue);
-		atbm_destroy_workqueue(self->rx_workqueue);
+		flush_workqueue(self->rx_workqueue);
+		destroy_workqueue(self->rx_workqueue);
 	}
 	self->rx_workqueue = NULL;	
 #endif
@@ -539,7 +540,7 @@ static int atbm_usb_xmit_schedule(struct sbus_priv *self)
 		atbm_printk_err("atbm_bh_schedule_tx term ERROR\n");
 		return -1;
 	}
-	atbm_queue_work(self->tx_workqueue,&self->tx_complete_work);
+	queue_work(self->tx_workqueue,&self->tx_complete_work);
 #endif
 	return 0;
 
@@ -557,7 +558,7 @@ static int atbm_usb_rev_schedule(struct sbus_priv *self)
 	{
 		return -1;
 	}
-	atbm_queue_work(self->rx_workqueue,&self->rx_complete_work);
+	queue_work(self->rx_workqueue,&self->rx_complete_work);
 #endif
 	return 0;
 }
@@ -2380,8 +2381,7 @@ static void atbm_usb_receive_data_complete(struct urb *urb)
 	struct atbm_common *hw_priv=NULL;
 	int RecvLength=urb->actual_length;
 	struct wsm_hdr *wsm;
-	struct ieee80211_hw *hw = NULL;
-	struct ieee80211_local *local = NULL;
+	
 	usb_printk( "rxend  Len %d\n",RecvLength);
 	
 	if(rx_urb != NULL){
@@ -2394,10 +2394,6 @@ static void atbm_usb_receive_data_complete(struct urb *urb)
 	
 	if(!hw_priv)
 		goto __free;
-
-	hw = hw_priv->hw;
-	local = hw_to_local(hw);
-	
 	if (!skb){
 		WARN_ON(1);
 		goto __free;
@@ -2468,21 +2464,7 @@ static void atbm_usb_receive_data_complete(struct urb *urb)
 				u8 *data = skb->data;
 				atbm_printk_err("actual_length(%d),max_len(%d),transfer_buffer_length(%d)\n",
 								urb->actual_length,RX_BUFFER_SIZE,urb->transfer_buffer_length);
-				/*
-					add by yuzhihuang
-					usb recive packet loss ,  reload wifi driver
-					must set upper deal SIGUSR1 signal process pid when send signal befor
-				*/
-				if(urb->actual_length < urb->transfer_buffer_length){
-					atbm_printk_err("%s:need reload wifi driver! \n",__FUNCTION__);
-					if(local->upper_pid != 0)
-						send_signal(SIGUSR1,local->upper_pid);
-					else
-						atbm_printk_err("%s:not set upper process pid , not send signal\n",__FUNCTION__);
-				}
-				/*
-					end add
-				*/				
+					
 				while(actual_length > 0){
 					wsm = (struct wsm_hdr *)data;
 					atbm_printk_err("rx id (%x),len(%d)\n",wsm->id,wsm->len);
@@ -2975,12 +2957,8 @@ static void atbm_wtd_init(void)
 		err = PTR_ERR(g_wtd.wtd_thread);
 		g_wtd.wtd_thread = NULL;
 	} else {
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(5, 9, 0))
-	sched_set_fifo_low(g_wtd.wtd_thread);
-#else
 	sched_setscheduler(g_wtd.wtd_thread,
 			SCHED_FIFO, &param);
-#endif
 #ifdef HAS_PUT_TASK_STRUCT
 		get_task_struct(g_wtd.wtd_thread);
 #endif
@@ -3201,7 +3179,7 @@ static void atbm_process_system_action(struct atbm_common *hw_priv,
 		case ATBM_SYSTEM_REBOOT:
 		case ATBM_SYSTEM_RMMOD:
 			atomic_set(&local->resume_timer_start,1);
-			atbm_mod_timer(&local->resume_timer, round_jiffies(jiffies + 5*HZ));
+			mod_timer(&local->resume_timer, round_jiffies(jiffies + 5*HZ));
 			break;
 		case ATBM_SYSTEM_NORMAL:
 		case ATBM_SYSTEM_MAX:
@@ -3240,7 +3218,7 @@ static void atbm_usb_station_diconnect_sync(struct atbm_common *hw_priv,
 	/*
 	*make sure beacon_connection_loss_work has been processed
 	*/
-	atbm_flush_workqueue(local->workqueue);
+	flush_workqueue(local->workqueue);
 	/*
 	*make sure deauthen has been send;
 	*/
@@ -3254,7 +3232,7 @@ static void atbm_usb_station_diconnect_sync(struct atbm_common *hw_priv,
 	/*
 	*make sure unjoin work complete
 	*/
-	atbm_flush_workqueue(hw_priv->workqueue);	
+	flush_workqueue(hw_priv->workqueue);	
 sync_end:
 	return;
 }
@@ -3573,11 +3551,7 @@ static void __atbm_usb_disconnect(struct usb_interface *intf)
 		if (interface_to_usbdev(intf)->state != USB_STATE_NOTATTACHED) 
 		{
 			atbm_printk_exit("usb_reset_device\n");
-			mutex_unlock(&intf->dev.mutex);
 			usb_reset_device(interface_to_usbdev(intf));
-			mutex_lock(&intf->dev.mutex);
-			//intf->dev.parent
-		//	mdelay(2000);
 		}	
 		self->suspend = 1;
 		atbm_usb_urb_free(self,self->drvobj->rx_urb,RX_URB_NUM);
@@ -3621,8 +3595,8 @@ static void atbm_usb_disconnect_flush(struct atbm_common *hw_priv)
 	
 	#ifndef USB_USE_TASTLET_TXRX
 	{
-		atbm_flush_workqueue(self->tx_workqueue);
-		atbm_flush_workqueue(self->rx_workqueue);		
+		flush_workqueue(self->tx_workqueue);
+		flush_workqueue(self->rx_workqueue);		
 	}
 	#else
 	{
@@ -4346,7 +4320,6 @@ static int __init atbm_usb_module_init(void)
 	atbm_printk_init("atbm_usb_module_init %x\n",wifi_module_exit);
 	ieee80211_atbm_mem_int();
 	ieee80211_atbm_skb_int();
-	atbm_wq_init();
 	atbm_init_firmware();
 	atbm_usb_module_lock_int();
 	atbm_wifi_set_status(0);
@@ -4359,9 +4332,7 @@ static int __init atbm_usb_module_init(void)
 	atbm_usb_module_unlock();
 	atbm_ieee80211_init();
 	atbm_usb_init();
-#ifdef ANDROID
 	register_reboot_notifier(&atbm_reboot_nb);
-#endif
 	abtm_usb_enum_each_interface();
 	return 0;
 }
@@ -4467,9 +4438,7 @@ static void  atbm_usb_module_exit(void)
 	atomic_set(&g_wtd.wtd_term, 1);
 	atomic_set(&g_wtd.wtd_run, 0);
 	atbm_usb_exit();
-#ifdef ANDROID
 	unregister_reboot_notifier(&atbm_reboot_nb);
-#endif
 	atbm_ieee80211_exit();
 	atbm_release_firmware();
 	atbm_usb_module_lock();
@@ -4481,7 +4450,6 @@ static void  atbm_usb_module_exit(void)
 	atbm_module_attribute_exit();
 	atbm_wifi_set_status(0);
 	atbm_usb_module_lock_release();
-	atbm_wq_exit();
 	ieee80211_atbm_mem_exit();
 	ieee80211_atbm_skb_exit();
 	atbm_printk_exit("atbm_usb_module_exit--%d\n",wifi_module_exit);

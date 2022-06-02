@@ -581,15 +581,14 @@ int ieee80211_brigde_hash_update(struct ieee80211_sub_if_data *sdata, struct sk_
 		{
 			struct arphdr *arp = (struct arphdr *)(ehdr +1);
 			__be32 src_ipaddr, tgt_ipaddr;
-			char *src_devaddr,*tgt_devaddr;
+			char *src_devaddr;//, *tgt_devaddr;
 			char *arpptr = (char *)(arp + 1);
-			
 			
 			src_devaddr = arpptr;
 			arpptr += ETH_ALEN;
 			memcpy(&src_ipaddr, arpptr, sizeof(u32));
 			arpptr += sizeof(u32);
-			tgt_devaddr = arpptr;
+			//tgt_devaddr = arpptr;
 			arpptr += ETH_ALEN;
 			memcpy(&tgt_ipaddr, arpptr, sizeof(u32));
 
@@ -605,19 +604,8 @@ int ieee80211_brigde_hash_update(struct ieee80211_sub_if_data *sdata, struct sk_
 				//record sourc
 				//frame_hexdump("\nbeforce replace ARP:", ((char *)(arp + 1))-2,22);
 				// change to ARP sender mac address to wlan STA address
-				
-				
-               	ieee80211_brigde_network_insert(sdata, src_devaddr, (const u8 *)&src_ipaddr);
-
-	
-
-			   			
-				
-				atbm_printk_err("%s 2: src_devaddr[%pM]£¬tgt_devaddr[%pM] \n",__func__,src_devaddr,tgt_devaddr);
-				
-				
-				memcpy(src_devaddr, NETDEV_HWADDR(sdata), ETH_ALEN);	
-				
+                        ieee80211_brigde_network_insert(sdata, src_devaddr, (const u8 *)&src_ipaddr);
+		        memcpy(src_devaddr, NETDEV_HWADDR(sdata), ETH_ALEN);	
 				//frame_hexdump("\nafter replace ARP:", ((char *)(arp + 1))-2,22);
 			//}
 			//ieee80211_brigde_network_insert(sdata, skb->data+ETH_ALEN, &src_ipaddr);
@@ -821,17 +809,16 @@ void ieee80211_tx_set_dhcp_bcast_flag(struct ieee80211_sub_if_data *sdata, struc
 	}
 }
 /////////////////////////////////////////////////////////////////////////
-struct ieee80211_sub_if_data *ieee80211_brigde_sdata_check(struct ieee80211_local *local,struct sk_buff **pskb,
+struct ieee80211_sub_if_data *ieee80211_brigde_sdata_check(struct ieee80211_local *local,struct sk_buff *skb,
 																			   struct ieee80211_sub_if_data *source_sdata)
 {
-	struct net_device *dev = source_sdata->dev;	
-	struct sk_buff *skb = *pskb;
+	struct net_device *dev = source_sdata->dev;
 	struct ethhdr *ehdr = (struct ethhdr *)skb->data;
 	struct ieee80211_sub_if_data *sdata = source_sdata;
 	struct ieee80211_sub_if_data *sta_sdata = NULL;
 	struct ieee80211_sub_if_data *temp_sdata = NULL;
 	struct NETWIFI_S_BRIDGE *br0_priv = NULL;
-	
+
 	rcu_read_lock();
 	
 	if(memcmp(ehdr->h_dest,ehdr->h_source,ETH_ALEN)){
@@ -857,17 +844,6 @@ struct ieee80211_sub_if_data *ieee80211_brigde_sdata_check(struct ieee80211_loca
 	if(sta_sdata == NULL)
 		goto exit_rcu;
 	
-	if(atbm_skb_shared(skb) || atbm_skb_cloned(skb)){
-		skb = atbm_skb_copy(*pskb, GFP_ATOMIC);
-		if(skb == NULL){
-			atbm_printk_err("%s:skb cope err\n",__func__);
-			goto exit_rcu;
-		}
-		dev_kfree_skb(*pskb);
-		*pskb = skb;
-		ehdr = (struct ethhdr *)skb->data;
-	}
-	atbm_skb_linearize(skb);
 	br0_priv = sta_sdata->bridge_priv;
 //	__vlan_hdr_del();
     BR0_LOCK(br0_priv);
@@ -991,10 +967,9 @@ exit_rcu:
 	return sdata;
 }
 
-int ieee80211_brigde_change_txhdr(struct ieee80211_sub_if_data *sdata, struct sk_buff **pskb)
+int ieee80211_brigde_change_txhdr(struct ieee80211_sub_if_data *sdata, struct sk_buff *skb)
 {
 	struct net_device *dev = sdata->dev;
-	struct sk_buff *skb = *pskb;
 	struct ethhdr *ehdr = (struct ethhdr *)skb->data;
     struct NETWIFI_S_BRIDGE *br0_priv = sdata->bridge_priv;
 	void *br_port = NULL;
@@ -1037,19 +1012,8 @@ int ieee80211_brigde_change_txhdr(struct ieee80211_sub_if_data *sdata, struct sk
 
 		*/
 		
-		
-		if(atbm_skb_shared(skb) || atbm_skb_cloned(skb)){
-			skb = atbm_skb_copy(*pskb, GFP_ATOMIC);
-			if(skb == NULL){
-				atbm_printk_err("%s:skb cope err\n",__func__);
-				return -1;
-			}
-			dev_kfree_skb(*pskb);
-			*pskb = skb;
-			ehdr = (struct ethhdr *)skb->data;
-		}
-		atbm_skb_linearize(skb);
 		ehdr = (struct ethhdr *)skb->data;
+
 #if 0
 		if ((is_multicast_ether_addr(ehdr->h_dest))||
 			(memcmp(ehdr->h_source, br0_priv->br_mac, ETH_ALEN) &&
@@ -1079,7 +1043,7 @@ int ieee80211_brigde_change_txhdr(struct ieee80211_sub_if_data *sdata, struct sk
 						memcpy(br0_priv->fast_mac, ehdr->h_source, ETH_ALEN);
 						memcpy(br0_priv->fast_ip, &iph->saddr, 4);
 						br0_priv->fast_entry->ageing_timer = jiffies;
-						atbm_printk_debug("ieee80211_brigde_change_txhdr: fast_mac [%x:%x:%x:%x:%x:%x], ip %d.%d.%d.%d\n",			
+						br_printk("atbm_br0: fast_mac [%x:%x:%x:%x:%x:%x], ip %d.%d.%d.%d\n",			
 																br0_priv->fast_mac[0], 
 																br0_priv->fast_mac[1], 
 																br0_priv->fast_mac[2], 
@@ -1096,11 +1060,8 @@ int ieee80211_brigde_change_txhdr(struct ieee80211_sub_if_data *sdata, struct sk
 			}
 
 			if(need_insert){
-				/*
-					¸üĞÂ¹şÏ£±í
-				*/
 				if(ieee80211_brigde_hash_update(sdata, skb) <0) {
-					atbm_printk_err("ieee80211_brigde_change_txhdr: ieee80211_brigde_change_txhdr fail!\n");
+					atbm_printk_err("TX DROP: ieee80211_brigde_change_txhdr fail!\n");
 					return -1;
 
 				}
@@ -1119,12 +1080,9 @@ int ieee80211_brigde_change_txhdr(struct ieee80211_sub_if_data *sdata, struct sk
 			return 0;
 		}
 		//change source mac to station macaddr
-		if(memcmp(ehdr->h_source, sdata->dev->dev_addr, ETH_ALEN) != 0){
-			memcpy(ehdr->h_source, sdata->dev->dev_addr, ETH_ALEN);
-			
-			ieee80211_tx_set_dhcp_bcast_flag(sdata, skb);
-		}
-
+		memcpy(ehdr->h_source, sdata->dev->dev_addr, ETH_ALEN);
+		
+		ieee80211_tx_set_dhcp_bcast_flag(sdata, skb);
 	}
 
 	return 0;

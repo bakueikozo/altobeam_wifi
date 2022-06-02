@@ -51,7 +51,7 @@ static void ieee80211_suspend_sta_disconnect(struct ieee80211_sub_if_data *sdata
 		mutex_unlock(&local->sta_mtx);		
 	}
 
-	atbm_flush_workqueue(local->workqueue);
+	flush_workqueue(local->workqueue);
 
 	drv_flush(local, sdata, false);
 	sta_info_flush(local, sdata);
@@ -88,7 +88,7 @@ int __ieee80211_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	
 	list_for_each_entry(sdata, &local->interfaces, list) {
 		
-		atbm_cancel_work_sync(&sdata->work);
+		cancel_work_sync(&sdata->work);
 	
 		if (!ieee80211_sdata_running(sdata))
 			continue;
@@ -134,18 +134,18 @@ int __ieee80211_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	/* make quiescing visible to timers everywhere */
 	mb();
 
-	atbm_flush_workqueue(local->workqueue);
+	flush_workqueue(local->workqueue);
 
 	/* Don't try to run timers while suspended. */
-	atbm_del_timer_sync(&local->sta_cleanup);
+	del_timer_sync(&local->sta_cleanup);
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
 	 /*
 	 * Note that this particular timer doesn't need to be
 	 * restarted at resume.
 	 */
 	list_for_each_entry(sdata, &local->interfaces, list) {
-		atbm_cancel_work_sync(&sdata->dynamic_ps_enable_work);
-		atbm_del_timer_sync(&sdata->dynamic_ps_timer);
+		cancel_work_sync(&sdata->dynamic_ps_enable_work);
+		del_timer_sync(&sdata->dynamic_ps_timer);
 	}
 #endif
 	local->wowlan = wowlan && local->open_count;
@@ -166,13 +166,13 @@ int __ieee80211_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 			local->wowlan = false;
 		} else {
 			list_for_each_entry(sdata, &local->interfaces, list) {
-				atbm_cancel_work_sync(&sdata->work);
+				cancel_work_sync(&sdata->work);
 				ieee80211_quiesce(sdata);
 			}
 			goto suspend;
 		}
 		list_for_each_entry(sdata, &local->interfaces, list) {
-			atbm_cancel_work_sync(&sdata->work);
+			cancel_work_sync(&sdata->work);
 		}
 		goto suspend;
 	}
@@ -202,7 +202,7 @@ int __ieee80211_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 
 	/* remove all interfaces */
 	list_for_each_entry(sdata, &local->interfaces, list) {
-		atbm_cancel_work_sync(&sdata->work);
+		cancel_work_sync(&sdata->work);
 
 		if (!ieee80211_quiesce(sdata))
 			continue;
@@ -224,7 +224,7 @@ int __ieee80211_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	if(local->wowlan == 0){
 		int err = 0;
 		list_for_each_entry(sdata, &local->interfaces, list) {
-			atbm_cancel_work_sync(&sdata->work);
+			cancel_work_sync(&sdata->work);
 		
 			if (!ieee80211_sdata_running(sdata))
 				continue;

@@ -88,20 +88,7 @@ enum atbm_msg_type{
 	ATBM_DEV_IO_SET_EFUSE_DELTAGAIN = 27,
 	ATBM_DEV_IO_MIN_TX_RATE		 = 28,
 	ATBM_DEV_IO_SET_RATE_POWER	 = 29,
-#ifdef CONFIG_IEEE80211_SPECIAL_FILTER
-
 	ATBM_DEV_IO_SET_SPECIAL_FILTER = 30,
-#endif
-	ATBM_DEV_IO_SET_COUNTRY_CODE = 31,
-	
-	ATBM_DEV_IO_GET_DRIVER_VERSION = 32,
-	ATBM_DEV_IO_GET_EFUSE			= 33,
-	ATBM_DEV_IO_GET_ETF_START_RX_RESULTS = 34,
-	ATBM_DEV_IO_SET_UPERR_PROCESS_PID = 35,
-#ifdef CONFIG_ATBM_SUPPORT_AP_CONFIG
-	ATBM_DEV_IO_SET_FIX_SCAN_CHANNEL = 36,
-#endif
-
 };
 
 #define WSM_MAX_NUM_LINK_AP 14//Lmac support station number is 4;
@@ -150,14 +137,24 @@ extern char ch_and_type[20];
 extern u8 ucWriteEfuseFlag;
 extern u32 chipversion;
 extern struct rxstatus_signed gRxs_s;
-extern struct etf_test_config etf_config;
+extern struct test_threshold gthreshold_param;
 extern u32 MyRand(void);
 extern int wsm_start_tx_v2(struct atbm_common *hw_priv, struct ieee80211_vif *vif );
 extern int wsm_start_tx(struct atbm_common *hw_priv, struct ieee80211_vif *vif);
 extern int wsm_stop_tx(struct atbm_common *hw_priv);
-extern u32 GetChipVersion(struct atbm_common *hw_priv);
-extern void atbm_set_special_oui(struct atbm_common *hw_priv, char *pdata, int len);
 
+static char spec_oui_buf[256];
+static char *spec_oui = "NULL";
+module_param(spec_oui,charp,0644);
+MODULE_PARM_DESC(spec_oui,"special oui");
+void atbm_set_special_oui(struct atbm_common *hw_priv, char *pdata, int len)
+{
+    memset(spec_oui_buf, 0, 256);
+    memcpy(spec_oui_buf, pdata, len);
+    spec_oui = spec_oui_buf;
+
+    return;
+}
 
 static int atbm_dev_get_ap_info(struct net_device *dev, struct altm_wext_msg *msg)
 {
@@ -330,35 +327,6 @@ static bool atbm_dev_handle_scan_sta(struct ieee80211_hw *hw,struct atbm_interna
 		memcpy(pos_info->User_data,sta->ie,sta->ie_len);
 	return true;
 }
-static int scan_result_filter_single_channel(u8 * recv_info,int channel)
-{
-	Wifi_Recv_Info_t *recv = NULL;
-	//Wifi_Recv_Info_t recv_bak[MAC_FILTER_NUM];
-	Wifi_Recv_Info_t *recv_bak = NULL;
-	int i = 0,j = 0;
-	if(!recv_info){
-		atbm_printk_err("scan_result_filter_channel recv_info NULL \n");
-		return -1;
-	}
-	recv_bak = atbm_kmalloc(sizeof(Wifi_Recv_Info_t) * MAC_FILTER_NUM , GFP_KERNEL);
-	if(!recv_bak){
-		atbm_printk_err("scan_result_filter_channel recv_bak NULL \n");
-		return -1;
-	}
-	memset(recv_bak,0,sizeof(Wifi_Recv_Info_t)*MAC_FILTER_NUM);
-	recv = (Wifi_Recv_Info_t *)recv_info;
-	
-	for(i = 0;i < MAC_FILTER_NUM;i++){
-		if(recv[i].channel == channel){
-			memcpy(&recv_bak[j],&recv[i],sizeof(Wifi_Recv_Info_t));
-			j++;
-		}
-	}
-	memcpy(recv_info,recv_bak,sizeof(Wifi_Recv_Info_t)*MAC_FILTER_NUM);
-	if(recv_bak)
-		atbm_kfree(recv_bak);
-	return 0;
-}
 
 static int atbm_dev_set_sta_scan(struct net_device *dev, struct altm_wext_msg *msg)
 {
@@ -368,7 +336,6 @@ static int atbm_dev_set_sta_scan(struct net_device *dev, struct altm_wext_msg *m
 	int ret = 0;
 	struct ieee80211_internal_scan_request internal_scan;
 	struct atbm_internal_scan_results_req req;
-	//Wifi_Recv_Info_t *recv_data = NULL;
 	u8 *user_pos = NULL;
 	u8 *recv_info = NULL;
 	u8 scan_ch = 0;
@@ -432,10 +399,7 @@ static int atbm_dev_set_sta_scan(struct net_device *dev, struct altm_wext_msg *m
 	req.result_handle = atbm_dev_handle_scan_sta;
 
 	ieee80211_scan_internal_req_results(sdata->local,&req);
-	
-	if(internal_scan.n_channels == 1)
-		scan_result_filter_single_channel(recv_info,scan_ch);
-	
+
 	if(copy_to_user(user_pos, recv_info, MAC_FILTER_NUM*sizeof(Wifi_Recv_Info_t)) != 0){
 		ret = -EINVAL;
 	}
@@ -507,12 +471,6 @@ static int atbm_dev_set_special_oui(struct net_device *dev, struct altm_wext_msg
 	}
 	memcpy(special,msg->externData, len);
 
-    {
-  //  struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-    struct atbm_vif *priv = (struct atbm_vif *)sdata->vif.drv_priv;
-    atbm_set_special_oui(priv->hw_priv, msg->externData, len);
-    }
-
 	list_for_each_entry(sdata_update, &local->interfaces, list){
 		bool res = true;
 		
@@ -567,8 +525,8 @@ static int atbm_dev_set_iftype(struct net_device *dev, struct altm_wext_msg *msg
 	return 0;
 }
 /*
-msg.type:
-	1 filter_frame 
+msg.value:
+	1 filter_frame , 80 , 40
 
 	2 filter_ie 
 	
@@ -576,15 +534,13 @@ msg.type:
 
 	4 filter show
 
-msg.value:
+msg.externData[0]:	
 	filter_frame : 80 or 40
 	filter_ie	 : ie
 
-msg.externData:	
+msg.externData[1~3]:	
 	filter_ie	 : oui1 oui2 pui3
 */
-#ifdef CONFIG_IEEE80211_SPECIAL_FILTER
-
 enum SPECIAL_FILTER_TYPE{
 	FILTER_FRAME = 1,
 	FILTER_IE	 = 2,
@@ -604,7 +560,7 @@ static int atbm_dev_set_special_filter(struct net_device *dev, struct altm_wext_
 	memset(&filter,0,sizeof(struct ieee80211_special_filter));
 	switch(msg->value){
 		case FILTER_FRAME:{
-			filter.filter_action = (msg->externData[0]/10*16) + (msg->externData[0]%10) ;
+			filter.filter_action = msg->externData[0];
 			filter.flags = SPECIAL_F_FLAGS_FRAME_TYPE;
 			atbm_printk_err("%s:action(%x)\n",__func__,filter.filter_action);
 			ret = ieee80211_special_filter_register(sdata,&filter);
@@ -621,8 +577,7 @@ static int atbm_dev_set_special_filter(struct net_device *dev, struct altm_wext_
 				filter.oui[2] = msg->externData[3];
 				filter.flags |= SPECIAL_F_FLAGS_FRAME_OUI;
 			}
-			atbm_printk_err("%s:ie[%d],oui[%d:%d:%d]\n",__func__,filter.filter_action,
-											filter.oui[0],filter.oui[1],filter.oui[2]);
+			atbm_printk_err("%s:ie[%d],oui[%d:%d:%d]\n",__func__,filter.filter_action,filter.oui[0],filter.oui[1],filter.oui[2]);
 			ret = ieee80211_special_filter_register(sdata,&filter);
 		}break;
 		case FILTER_CLEAR:{
@@ -680,7 +635,7 @@ exit:
 	
 	
 }
-#endif
+
 static int atbm_dev_set_adaptive(struct net_device *dev, struct altm_wext_msg *msg)
 {
     int ret = 0;
@@ -773,82 +728,57 @@ int atbm_dev_set_txpwr(struct net_device *dev, struct altm_wext_msg *msg)
 
     dev_printk("%s\n", __func__);
     
-   // memcpy(&txpwr_indx, &msg->externData[0], sizeof(int));
-    txpwr_indx = msg->externData[0];
+    memcpy(&txpwr_indx, &msg->externData[0], sizeof(int));
+    if(txpwr_indx != 0 && txpwr_indx != 1){
+        atbm_printk_err("error, txpwr_indx %d\n", txpwr_indx);
+        return -1;
+    }
 
-	if(txpwr_indx > 127){
-		txpwr_indx = txpwr_indx - 256;
-		
-	}
-
-	if(txpwr_indx > 16 || txpwr_indx< -16){
-		 dev_printk("txpwr_indx = %d , super range\n",txpwr_indx);
-		 return -1;
-	}
-	
+    /*
+    *bit0 (0:20M Low, 1:20M High)
+    *bit1 (0:40M Low, 1:40M High)
+    */
+    if(txpwr_indx == 1)
+        txpwr |= BIT(0) | BIT(1);
+    
+    // -- # cat sys/module/atbm_wifi/parameters/wifi_txpw
+    atbm_set_tx_power(hw_priv, txpwr);
+    
     memset(cmd, 0, sizeof(cmd));
 
+    //Convert to lmac value, 0xF is 20M and 40M high tx power.
+    if(txpwr_indx == 1)
+        txpwr_indx = 0x0F;
     /*
     *0,3,15,63
     */
     sprintf(cmd, "set_rate_txpower_mode %d ", txpwr_indx);
     
-    dev_printk("atbm: %s , %d,txpwr_indx = %d\n", cmd,strlen(cmd),txpwr_indx);
+    dev_printk("atbm: %s\n", cmd);
     ret = wsm_write_mib(hw_priv, WSM_MIB_ID_FW_CMD, cmd, strlen(cmd), priv->if_id);
     if(ret < 0){
     }
 
     return ret;
+
 }
 static int atbm_dev_get_work_channel(struct net_device *dev, struct altm_wext_msg *msg)
 {
 	unsigned short channel = 0;
     struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
     struct ieee80211_local *local = sdata->local;
-	struct ieee80211_channel_state *chan_state = NULL;
-	struct ieee80211_sub_if_data *sdata_update;
+	struct ieee80211_channel_state *chan_state;
+    dev_printk("%s\n", __func__);
+	
 	mutex_lock(&local->mtx);
-		switch(sdata->vif.type){
-			case NL80211_IFTYPE_STATION:{
-				if(atbm_wifi_status_get() == 1){
-					chan_state = ieee80211_get_channel_state(local, sdata_update);
-					if(chan_state)
-						channel = channel_hw_value(chan_state->oper_channel);
-					else{
-						
-						channel = 0;
-					}
-				}else{
-#ifdef CONFIG_ATBM_STA_LISTEN				
-					if(local->listen_channel)
-						channel = channel_hw_value(local->listen_channel);
-					else
-						channel = 0;
-#endif					
-				}
-			}break;
-			case NL80211_IFTYPE_AP:{
-				chan_state = ieee80211_get_channel_state(local, sdata_update);
-				if(chan_state)
-					channel = channel_hw_value(chan_state->oper_channel);
-				else
-					channel = 0;
-			}break;
-			case NL80211_IFTYPE_MONITOR:{
-				atbm_printk_err("NL80211_IFTYPE_MONITOR \n");
-				chan_state = ieee80211_get_channel_state(local, sdata_update);
-				if(chan_state)
-					channel = channel_hw_value(chan_state->oper_channel);
-				else
-					channel = 0;
-			}break;
-			default:
-				atbm_printk_err("other type(%d) \n",sdata->vif.type);
-			break;
-		}
-
+	chan_state = ieee80211_get_channel_state(local, sdata);
+	if(ieee80211_get_channel_mode(local, NULL) == CHAN_MODE_FIXED){
+		channel = channel_hw_value(chan_state->oper_channel);
+	}else {
+		channel = 0;
+	}
 	mutex_unlock(&local->mtx);
-	atbm_printk_err("current work channel is [%d] \n",channel);
+	
     //msg->value = hw_priv->channel->hw_value;
     memcpy(&msg->externData[0], &channel, sizeof(unsigned short));
     
@@ -1047,7 +977,6 @@ static bool atbm_dev_handle_ap_list(struct ieee80211_hw *hw,struct atbm_internal
 
 		req->n_stas ++;
 		pos_info->enc_type = (u8)sta->enc_type;
-		pos_info->enc_type_name = sta->ieee80211_enc_type_name;
 		pos_info->rssi = sta->signal;	
 		memcpy(pos_info->mac_addr,sta->bssid,6);
 		if(sta->ssid_len && sta->ssid)
@@ -1153,39 +1082,29 @@ extern void etf_param_init(struct atbm_common *hw_priv);
 int atbm_dev_etf_test(struct net_device *dev, struct altm_wext_msg *msg)
 {
     int i =0 ;
-	u8 chipid = 0;
     struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
     struct atbm_vif *priv = (struct atbm_vif *)sdata->vif.drv_priv;
     struct atbm_common *hw_priv = ABwifi_vifpriv_to_hwpriv(priv);
 
     etf_param_init(hw_priv);
-	chipid = GetChipVersion(hw_priv);
 
 	ucWriteEfuseFlag = msg->value;
 	atbm_printk_always("ucWriteEfuseFlag:%d\n", ucWriteEfuseFlag);
 
-    etf_config.freq_ppm = 7000;
-    etf_config.rssifilter = -100;
-    etf_config.txevm = 400;
-    etf_config.txevmthreshold = 400;
-	if(chipid == 0x24)//athenaB(6022)
-	{
-		etf_config.rxevm = 400;
-    	etf_config.rxevmthreshold = 400;
-	}
-	else if(chipid == 0x49)//AresB(6032)
-	{
-		etf_config.rxevm = 25;
-    	etf_config.rxevmthreshold = 25;
-	}
-    etf_config.cableloss = 30*4;
-    etf_config.featureid = MyRand();
+    gthreshold_param.freq_ppm = 7000;
+    gthreshold_param.rxevm = 400;
+    gthreshold_param.rssifilter = -100;
+    gthreshold_param.txevm = 400;
+    gthreshold_param.txevmthreshold = 400;
+    gthreshold_param.rxevmthreshold = 400;
+    gthreshold_param.cableloss = 30*4;
+    gthreshold_param.featureid = MyRand();
 
-	atbm_printk_always("featureid:%d\n", etf_config.featureid);
+	atbm_printk_always("featureid:%d\n", gthreshold_param.featureid);
 	atbm_printk_always("Freq:%d,txEvm:%d,rxEvm:%d,txevmthreshold:%d,rxevmthreshold:%d,Txpwrmax:%d,Txpwrmin:%d,Rxpwrmax:%d,Rxpwrmin:%d,rssifilter:%d,cableloss:%d,default_dcxo:%d\n",
-		etf_config.freq_ppm,etf_config.txevm,etf_config.rxevm,etf_config.txevmthreshold,etf_config.rxevmthreshold,
-		etf_config.txpwrmax,etf_config.txpwrmin,etf_config.rxpwrmax,
-		etf_config.rxpwrmin,etf_config.rssifilter,etf_config.cableloss,etf_config.default_dcxo);
+		gthreshold_param.freq_ppm,gthreshold_param.txevm,gthreshold_param.rxevm,gthreshold_param.txevmthreshold,gthreshold_param.rxevmthreshold,
+		gthreshold_param.txpwrmax,gthreshold_param.txpwrmin,gthreshold_param.rxpwrmax,
+		gthreshold_param.rxpwrmin,gthreshold_param.rssifilter,gthreshold_param.cableloss,gthreshold_param.default_dcxo);
 
     hw_priv->etf_channel = 7;
     hw_priv->etf_channel_type = 0;
@@ -1213,23 +1132,19 @@ int atbm_dev_etf_test(struct net_device *dev, struct altm_wext_msg *msg)
 int atbm_dev_etf_get_result(struct net_device *dev, struct altm_wext_msg *msg)
 {
     int ret = 0;
-    u8 chipid = 0;
+//    u8 chipid = 0;
     char *buff = NULL;
-	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-	struct ieee80211_local *local = sdata->local;
-	struct atbm_common *hw_priv=local->hw.priv;
-	
-	chipid = GetChipVersion(hw_priv);
 
-	if(!(buff = (char *)atbm_kzalloc(256, GFP_KERNEL))){
+ //   chipid = chipversion;
+
+	 if(!(buff = (char *)atbm_kzalloc(256, GFP_KERNEL))){
         return -ENOMEM;
     }
     memset(buff, 0, 256);
 
-    sprintf(buff, "%dcfo:%d,txevm:%d,rxevm:%d,dcxo:%d,txrssi:%d,rxrssi:%d,result:%d (0:OK; -1:FreqOffset Error; -2:efuse hard error;"
+    sprintf(buff, "cfo:%d,txevm:%d,rxevm:%d,dcxo:%d,txrssi:%d,rxrssi:%d,result:%d (0:OK; -1:FreqOffset Error; -2:efuse hard error;"
         " -3:efuse no written; -4:efuse anaysis failed; -5:efuse full; -6:efuse version change; -7:rx null)",
-	chipid,
-	gRxs_s.Cfo,
+    gRxs_s.Cfo,
     gRxs_s.txevm,
     gRxs_s.evm,
     gRxs_s.dcxo,
@@ -1254,16 +1169,7 @@ int atbm_dev_etf_get_result(struct net_device *dev, struct altm_wext_msg *msg)
     
     return ret;
 }
-/*
 
-channel = msg->externData[0];
-band_value = msg->externData[1~2];
-len = msg->externData[3~4];
-is_40M = msg->externData[5];
-greedfiled = msg->externData[6];
-
-*/
-static int atbm_dev_stop_tx(struct net_device *dev, struct altm_wext_msg *msg);
 
 static int atbm_dev_start_tx(struct net_device *dev, struct altm_wext_msg *msg)
 {
@@ -1276,31 +1182,22 @@ static int atbm_dev_start_tx(struct net_device *dev, struct altm_wext_msg *msg)
 	int band_value = 0;
 	int greedfiled = 0;
 	u8 ucDbgPrintOpenFlag = 1;
-	short *len_p;
-//	char *extra = NULL;
+	char *extra = NULL;
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_local *local = sdata->local;
 	struct atbm_common *hw_priv=local->hw.priv;
 	struct atbm_vif *vif;
 
-
 	if(ETF_bStartTx || ETF_bStartRx){
-		
-		if(ETF_bStartTx){
-			atbm_dev_stop_tx(dev,NULL);
-			msleep(500);
-		}else{
-			atbm_printk_err("Error! already start_tx, please stop_rx first!\n");
-			return 0;
-		}
-		
+		atbm_printk_err("Error! already start_tx/send_singleTone, please stop_tx first!\n");
+		return 0;
 	}
+
 	if(strlen(msg->externData) == 0)
 	{
 		atbm_printk_err("Invalid parameters\n");
 		return 0;
 	}
-	/*
 	if(!(extra = atbm_kmalloc(strlen(msg->externData), GFP_KERNEL)))
 		return -ENOMEM;
 
@@ -1308,28 +1205,7 @@ static int atbm_dev_start_tx(struct net_device *dev, struct altm_wext_msg *msg)
 	atbm_printk_err("%s\n", extra);
 
 	sscanf(extra, "%d %d %d %d %d", &channel, &band_value, &len, &is_40M, &greedfiled);
-*/
-	channel = msg->externData[0];
-	len_p = (short *)&msg->externData[1];
-	band_value = *len_p;
-	len_p = (short *)&msg->externData[3];
-	len = *len_p;
-	is_40M = msg->externData[5];
-	greedfiled = msg->externData[6];
-	
-	atbm_printk_err("atbm_dev_start_tx:channel[%d],rate[%d].len[%d],is_40M[%d],greedfiled[%d]\n",
-		channel,band_value,len,is_40M,greedfiled);
-	
-	if(channel < 0 || channel > 14){
-		atbm_printk_err("invalid channel[%d]!\n",channel);
-		ret = -EINVAL;
-		goto exit;
-	}
-	if(is_40M)
-		is_40M = 1;
-	else
-		is_40M = 0;
-	
+
 	//check rate 
 		switch(band_value){
 			case 10: rate = WSM_TRANSMIT_RATE_1;
@@ -1417,6 +1293,8 @@ static int atbm_dev_start_tx(struct net_device *dev, struct altm_wext_msg *msg)
 		}
 	}
 exit:
+	if(extra)
+		atbm_kfree(extra);
 	return ret;
 }
 
@@ -1450,12 +1328,6 @@ static int atbm_dev_stop_tx(struct net_device *dev, struct altm_wext_msg *msg)
 
 	return ret;
 }
-/*
-channel ----- msg->externData[0]
-is_40M ------ msg->externData[1]
-
-*/
-static int atbm_dev_stop_rx(struct net_device *dev, struct altm_wext_msg *msg);
 
 static int atbm_dev_start_rx(struct net_device *dev, struct altm_wext_msg *msg)
 {
@@ -1467,16 +1339,11 @@ static int atbm_dev_start_rx(struct net_device *dev, struct altm_wext_msg *msg)
 	struct ieee80211_local *local = sdata->local;
 	struct atbm_common *hw_priv=local->hw.priv;
 	struct atbm_vif *vif;
-	int channel,is_40M;
+
+
 	if(ETF_bStartTx || ETF_bStartRx){
-		if(ETF_bStartRx){
-			atbm_printk_err("start rx : %s ,stop now and change chan[%d],is_40M[%d]\n",ch_and_type,msg->externData[0],msg->externData[1]);
-			atbm_dev_stop_rx(dev,NULL);
-			msleep(500);
-		}else{
-			atbm_printk_err("Error! already ETF_bStartRx, please stop_tx first!\n");
-			return 0;
-		}
+		atbm_printk_err("Error! already ETF_bStartRx/ETF_bStartTx/send_singleTone, please stop first!\n");
+		return 0;
 	}
 
 	if(strlen(msg->externData) == 0)
@@ -1484,16 +1351,7 @@ static int atbm_dev_start_rx(struct net_device *dev, struct altm_wext_msg *msg)
 		atbm_printk_err("Invalid parameters\n");
 		return 0;
 	}
-	channel = msg->externData[0];
-	is_40M = msg->externData[1];
-	if(channel < 0 || channel > 14){
-		atbm_printk_err("channel[%d] not support \n",channel);
-		return -EINVAL;
-	}
-	if(is_40M)
-		is_40M = 1;
-	else
-		is_40M = 0;
+
 	//./iwpriv wlan0 fwdbg 1
 	atbm_for_each_vif(hw_priv,vif,i){
 		if (vif != NULL)
@@ -1503,12 +1361,12 @@ static int atbm_dev_start_rx(struct net_device *dev, struct altm_wext_msg *msg)
 			break;
 		}
 	}
-	sprintf(cmd,"monitor 1 %d %d",channel,is_40M);
-	//memcpy(cmd+10, msg->externData, strlen(msg->externData)+1);
+
+	memcpy(cmd+10, msg->externData, strlen(msg->externData)+1);
 	memset(ch_and_type, 0, 20);
-//	memcpy(ch_and_type, msg->externData, strlen(msg->externData)+1);
-	sprintf(ch_and_type,"%d %d",channel,is_40M);
-	atbm_printk_wext("CMD:%s,ch_and_type:%s\n", cmd,ch_and_type);
+	memcpy(ch_and_type, msg->externData, strlen(msg->externData)+1);
+	
+	atbm_printk_wext("CMD:%s\n", cmd);
 	i = 0;
 	atbm_for_each_vif(hw_priv,vif,i){
 		if (vif != NULL)
@@ -1564,136 +1422,6 @@ static int atbm_dev_stop_rx(struct net_device *dev, struct altm_wext_msg *msg)
 	}
 	return ret;
 }
-
-static int atbm_dev_get_etf_rx_results(struct net_device *dev, struct altm_wext_msg *msg)
-{
-
-	u32 rx_status[3] = {0,0,0};
-//	int len = 0;
-	int ret = 0;
-	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-	struct ieee80211_local *local = sdata->local;
-	struct atbm_common *hw_priv=local->hw.priv;
-	struct rx_results{
-		u32  rxSuccess;
-		u32 FcsErr;
-		u32 PlcpErr;
-		};
-	struct rx_results rx_results_t;
-	if(ETF_bStartRx == 0){
-		atbm_printk_wext("%s:start rx not running\n",__func__);
-		ret = -EOPNOTSUPP;
-		goto exit;
-	}
-
-	ret = wsm_read_shmem(hw_priv,(u32)0x161001d8/*RX_STATUS_ADDR*/,rx_status,sizeof(rx_status));
-
-	if(ret != 0){
-		ret = -EINVAL;
-		goto exit;
-	}
-
-
-	rx_results_t.rxSuccess = rx_status[0]-rx_status[1];
-	rx_results_t.FcsErr = rx_status[1];
-	rx_results_t.PlcpErr = rx_status[2];
-	memcpy(msg->externData,&rx_results_t,sizeof(struct rx_results));
-	
-exit:
-	return ret;
-}
-#ifdef CONFIG_ATBM_SUPPORT_AP_CONFIG
-
-static int atbm_dev_set_fix_scan_channel(struct net_device *dev, struct altm_wext_msg *msg)
-{
-	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-	struct ieee80211_internal_ap_conf *conf_req;
-	int ret = -1;
-
-	conf_req = (struct ieee80211_internal_ap_conf *)msg->externData;
-
-	if(!conf_req){
-		atbm_printk_err("atbm_dev_set_fix_scan_channel : set fix scan channel error ! \n");
-		return -1;
-	}
-
-	if(conf_req->channel < 0 || conf_req->channel > 14){
-			conf_req->channel = 0;
-	}
-	
-	ret = atbm_internal_update_ap_conf(sdata,conf_req,conf_req->channel == 0?true:false);
-	
-
-	return ret;
-
-}
-
-#endif
-
-static int atbm_dev_set_country_code(struct net_device *dev, struct altm_wext_msg *msg)
-{
-#ifdef  CONFIG_ATBM_5G_PRETEND_2G
-	atbm_printk_err("this mode not support! \n");
-
-	return 0;
-#else
-	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-	struct ieee80211_local *local = sdata->local;
-	//unsigned char country_code[3] = {0};
-	int ret = 0;
-	
-	if(!ieee80211_sdata_running(sdata)){
-		ret = -ENETDOWN;
-		goto exit;
-	}
-	memcpy(local->country_code,&msg->externData[0],2);
-	atbm_printk_err("atbm_dev_set_country_code:country_code = %c%c---------------\n",local->country_code[0],local->country_code[1]);
-exit:
-	return ret;
-#endif	
-}
-
-static int atbm_dev_get_driver_version(struct net_device *dev, struct altm_wext_msg *msg)
-{
-	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-	struct ieee80211_local *local = sdata->local;
-	struct atbm_common *hw_priv=local->hw.priv;
-	short *p;
-	p = (short *)&msg->externData[0];
-	atbm_get_drv_version(p);
-	p = (short *)&msg->externData[2];
-	*p = (short)hw_priv->wsm_caps.firmwareVersion;
-
-	return 0;
-}
-static int atbm_dev_get_efuse(struct net_device *dev, struct altm_wext_msg *msg)
-{
-	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-	struct ieee80211_local *local = sdata->local;
-	struct atbm_common *hw_priv=local->hw.priv;
-	struct efuse_headr efuse_data;
-	int ret = -1;
-	
-
-
-	if ((ret = wsm_get_efuse_data(hw_priv, &efuse_data, sizeof(efuse_data))) == 0){	
-		atbm_printk_init("Get efuse data is [%d,%d,%d,%d,%d,%d,%d,%d,%02x:%02x:%02x:%02x:%02x:%02x]\n",
-				efuse_data.version,efuse_data.dcxo_trim,efuse_data.delta_gain1,efuse_data.delta_gain2,efuse_data.delta_gain3,
-				efuse_data.Tj_room,efuse_data.topref_ctrl_bias_res_trim,efuse_data.PowerSupplySel,efuse_data.mac[0],efuse_data.mac[1],
-				efuse_data.mac[2],efuse_data.mac[3],efuse_data.mac[4],efuse_data.mac[5]);
-		memcpy(&hw_priv->efuse, &efuse_data, sizeof(struct efuse_headr));
-	}
-	else{
-		atbm_printk_err("read efuse failed\n");
-		return -1;
-	}
-
-	memcpy(msg->externData,&efuse_data,sizeof(struct efuse_headr));
-
-	return 0;
-}
-	
-
 
 int atbm_wext_cmd(struct net_device *dev, void *data, int len)
 {
@@ -1780,23 +1508,17 @@ int atbm_wext_cmd(struct net_device *dev, void *data, int len)
         case ATBM_DEV_IO_SET_TXPWR_DCXO:
             atbm_dev_set_txpwr_dcxo(dev, msg);
             break;
-#ifdef CONFIG_IEEE80211_SPECIAL_FILTER
-
 		case ATBM_DEV_IO_SET_SPECIAL_FILTER:
 			atbm_dev_set_special_filter(dev, msg);
 			break;
-#endif
         case ATBM_DEV_IO_SET_TXPWR:
         {
-        	atbm_dev_set_txpwr(dev,msg);
-			#if 0
         	struct ieee80211_internal_wsm_txpwr txpwr;
 
 			memcpy(&txpwr.txpwr_indx, &msg->externData[0], sizeof(int)); 
         	if(atbm_internal_wsm_txpwr(hw_priv,&txpwr) == false){
 				ret = -EINVAL;
         	}
-			#endif
             break;
         }
         case ATBM_DEV_IO_GET_WORK_CHANNEL:
@@ -1930,35 +1652,6 @@ int atbm_wext_cmd(struct net_device *dev, void *data, int len)
 
 			break;
 		}
-		case ATBM_DEV_IO_SET_COUNTRY_CODE:
-		{
-			atbm_dev_set_country_code(dev, msg);
-		}break;
-		case ATBM_DEV_IO_GET_DRIVER_VERSION:{
-			if(atbm_dev_get_driver_version(dev, msg) != 0)
-				ret = -EINVAL;
-			}break;
-		case ATBM_DEV_IO_GET_EFUSE:{
-			if(atbm_dev_get_efuse(dev, msg) != 0)
-				ret = -EINVAL; 
-			
-			}break;
-		case ATBM_DEV_IO_GET_ETF_START_RX_RESULTS:{
-			if(atbm_dev_get_etf_rx_results(dev, msg) != 0)
-				ret = -EINVAL; 
-			}break;
-		case ATBM_DEV_IO_SET_UPERR_PROCESS_PID:{
-				local->upper_pid = msg->value;
-				atbm_printk_err("%s : set upper process pid = %d \n",__func__, local->upper_pid);
-	
-				
-			}break;
-#ifdef CONFIG_ATBM_SUPPORT_AP_CONFIG
-
-		case ATBM_DEV_IO_SET_FIX_SCAN_CHANNEL:{
-				ret = atbm_dev_set_fix_scan_channel(dev,msg);
-			}break;
-#endif
         default:
             atbm_printk_err("%s: not found. %d\n",__func__, msg->type);
             break;

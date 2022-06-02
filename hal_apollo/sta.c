@@ -192,14 +192,14 @@ void atbm_stop(struct ieee80211_hw *dev)
 	}
 	up(&hw_priv->scan.lock);
 
-	atbm_hw_cancel_delayed_work(&hw_priv->scan.probe_work,true);
-	atbm_hw_cancel_delayed_work(&hw_priv->scan.timeout,true);
+	atbm_cancle_delayed_work(&hw_priv->scan.probe_work,true);
+	atbm_cancle_delayed_work(&hw_priv->scan.timeout,true);
 #ifdef CONFIG_ATBM_APOLLO_TESTMODE
-	atbm_hw_cancel_delayed_work(&hw_priv->advance_scan_timeout,true);
+	atbm_cancle_delayed_work(&hw_priv->advance_scan_timeout,true);
 #endif
-	atbm_flush_workqueue(hw_priv->workqueue);
+	flush_workqueue(hw_priv->workqueue);
 #ifdef CONFIG_ATBM_BA_STATUS
-	atbm_del_timer_sync(&hw_priv->ba_timer);
+	del_timer_sync(&hw_priv->ba_timer);
 #endif
 
 	mutex_lock(&hw_priv->conf_mutex);
@@ -230,14 +230,14 @@ void atbm_stop(struct ieee80211_hw *dev)
 		priv->delayed_link_loss = 0;
 #endif
 		priv->join_status = ATBM_APOLLO_JOIN_STATUS_PASSIVE;
-		atbm_hw_cancel_delayed_work(&priv->join_timeout,false);
+		atbm_cancle_delayed_work(&priv->join_timeout,false);
 #ifndef CONFIG_TX_NO_CONFIRM
-		atbm_hw_cancel_delayed_work(&priv->bss_loss_work,false);
-		atbm_hw_cancel_delayed_work(&priv->connection_loss_work,false);
+		atbm_cancle_delayed_work(&priv->bss_loss_work,false);
+		atbm_cancle_delayed_work(&priv->connection_loss_work,false);
 #endif
-		atbm_hw_cancel_delayed_work(&priv->link_id_gc_work,false);
-		atbm_hw_cancel_delayed_work(&priv->dhcp_retry_work,false);
-		atbm_del_timer_sync(&priv->mcast_timeout);
+		atbm_cancle_delayed_work(&priv->link_id_gc_work,false);
+		atbm_cancle_delayed_work(&priv->dhcp_retry_work,false);
+		del_timer_sync(&priv->mcast_timeout);
 	}
 
 	wsm_unlock_tx(hw_priv);
@@ -500,7 +500,7 @@ reset_priv:
 	sta_printk("%s:priv->if_id(%d)\n",__func__,priv->if_id);
 	if (!__atbm_flush(hw_priv, true, priv->if_id))
 		wsm_unlock_tx(hw_priv);
-	atbm_hw_cancel_delayed_work(&priv->dhcp_retry_work,true);
+	atbm_cancle_delayed_work(&priv->dhcp_retry_work,true);
 	
 	spin_lock_bh(&priv->dhcp_retry_spinlock);
 	if(priv->dhcp_retry_skb){		
@@ -509,22 +509,22 @@ reset_priv:
 	}
 	spin_unlock_bh(&priv->dhcp_retry_spinlock);
 #ifndef CONFIG_TX_NO_CONFIRM	
-	atbm_hw_cancel_delayed_work(&priv->bss_loss_work,false);
-	atbm_hw_cancel_delayed_work(&priv->connection_loss_work,false);
+	atbm_cancle_delayed_work(&priv->bss_loss_work,false);
+	atbm_cancle_delayed_work(&priv->connection_loss_work,false);
 #endif
-	atbm_hw_cancel_delayed_work(&priv->link_id_gc_work,false);
-	atbm_hw_cancel_delayed_work(&priv->join_timeout,false);
+	atbm_cancle_delayed_work(&priv->link_id_gc_work,false);
+	atbm_cancle_delayed_work(&priv->join_timeout,false);
 #if 0
-	atbm_hw_cancel_delayed_work(&priv->set_cts_work,false);
+	atbm_cancle_delayed_work(&priv->set_cts_work,false);
 #endif
 #ifdef CONFIG_ATBM_SUPPORT_P2P
-	atbm_hw_cancel_delayed_work(&priv->pending_offchanneltx_work,false);
+	atbm_cancle_delayed_work(&priv->pending_offchanneltx_work,false);
 #endif
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
-	atbm_hw_cancel_queue_work(&priv->update_filtering_work,true);
+	atbm_cancle_queue_work(&priv->update_filtering_work,true);
 #endif
-	atbm_hw_cancel_queue_work(&priv->set_beacon_wakeup_period_work,true);
-	atbm_del_timer_sync(&priv->mcast_timeout);
+	atbm_cancle_queue_work(&priv->set_beacon_wakeup_period_work,true);
+	del_timer_sync(&priv->mcast_timeout);
 	/* TODO:COMBO: May be reset of these variables "delayed_link_loss and
 	 * join_status to default can be removed as dev_priv will be freed by
 	 * mac80211 */
@@ -591,7 +591,7 @@ reset_priv:
 	/*
 	*flush all work
 	*/
-	atbm_flush_workqueue(hw_priv->workqueue);
+	flush_workqueue(hw_priv->workqueue);
 	memset(priv, 0, sizeof(struct atbm_vif));
 }
 
@@ -935,7 +935,7 @@ void atbm_update_filtering(struct atbm_vif *priv)
 	return;
 }
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
-void atbm_update_filtering_work(struct atbm_work_struct *work)
+void atbm_update_filtering_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif,
@@ -946,7 +946,7 @@ void atbm_update_filtering_work(struct atbm_work_struct *work)
 	//atbm_update_filtering(priv);
 }
 #endif
-void atbm_set_beacon_wakeup_period_work(struct atbm_work_struct *work)
+void atbm_set_beacon_wakeup_period_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif,
@@ -1493,7 +1493,7 @@ finally:
 	return ret;
 }
 
-void atbm_wep_key_work(struct atbm_work_struct *work)
+void atbm_wep_key_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif , wep_key_work);
@@ -1610,11 +1610,6 @@ int __atbm_flush(struct atbm_common *hw_priv, bool drop, int if_id)
 		drop = true;
 	}
 
-	if(priv == NULL){
-		atbm_printk_err("%s:if_id[%d] is already reset\n",__func__,if_id);
-		return -1;
-	}
-	
 	for (;;) {
 		/* TODO: correct flush handling is required when dev_stop.
 		 * Temporary workaround: 2s
@@ -1783,7 +1778,7 @@ int atbm_cancel_remain_on_channel(struct ieee80211_hw *hw)
 	sta_printk( "[STA] Cancel remain on channel\n");
 
 	if (atomic_read(&hw_priv->remain_on_channel))
-		atbm_hw_cancel_delayed_work(&hw_priv->rem_chan_timeout,true);
+		atbm_cancle_delayed_work(&hw_priv->rem_chan_timeout,true);
 
 	if (atomic_read(&hw_priv->remain_on_channel))
 		atbm_rem_chan_timeout(&hw_priv->rem_chan_timeout.work);
@@ -1810,7 +1805,7 @@ void atbm_free_event_queue(struct atbm_common *hw_priv)
 	__atbm_free_event_queue(&list);
 }
 
-void atbm_event_handler(struct atbm_work_struct *work)
+void atbm_event_handler(struct work_struct *work)
 {
 	struct atbm_common *hw_priv =
 		container_of(work, struct atbm_common, event_handler);
@@ -1850,9 +1845,9 @@ void atbm_event_handler(struct atbm_work_struct *work)
 				spin_unlock_bh(&priv->bss_loss_lock);
 				sta_printk("[CQM] BSS lost.");
 				sta_printk( "[CQM] BSS lost.\n");
-				atbm_hw_cancel_delayed_work(&priv->bss_loss_work,true);
-				atbm_hw_cancel_delayed_work(&priv->connection_loss_work,true);
-				atbm_hw_cancel_delayed_work(&priv->dhcp_retry_work,true);
+				atbm_cancle_delayed_work(&priv->bss_loss_work,true);
+				atbm_cancle_delayed_work(&priv->connection_loss_work,true);
+				atbm_cancle_delayed_work(&priv->dhcp_retry_work,true);
 				if (!down_trylock(&hw_priv->scan.lock)) {
 					up(&hw_priv->scan.lock);
 					priv->delayed_link_loss = 0;
@@ -1879,9 +1874,9 @@ void atbm_event_handler(struct atbm_work_struct *work)
 				spin_lock_bh(&priv->bss_loss_lock);
 				priv->bss_loss_status = ATBM_APOLLO_BSS_LOSS_NONE;
 				spin_unlock_bh(&priv->bss_loss_lock);
-				atbm_hw_cancel_delayed_work(&priv->bss_loss_work,true);
-				atbm_hw_cancel_delayed_work(&priv->connection_loss_work,true);
-				atbm_hw_cancel_delayed_work(&priv->dhcp_retry_work,true);
+				atbm_cancle_delayed_work(&priv->bss_loss_work,true);
+				atbm_cancle_delayed_work(&priv->connection_loss_work,true);
+				atbm_cancle_delayed_work(&priv->dhcp_retry_work,true);
 				break;
 			}
 #endif
@@ -1984,12 +1979,8 @@ void atbm_event_handler(struct atbm_work_struct *work)
 					ret = atbm_set_pm (priv, &priv->powersave_mode);
 					if(ret)
 						priv->powersave_mode = pm;
-					
-#ifdef CONFIG_ATBM_STA_DYNAMIC_PS
-					priv->vif->bss_conf.ps_enabled = false;
-#endif
 				}
-                break;
+                                break;
 			}
 		}
 	}
@@ -1998,7 +1989,7 @@ event_handler_out:
 	__atbm_free_event_queue(&list);
 }
 #ifndef CONFIG_TX_NO_CONFIRM
-void atbm_bss_loss_work(struct atbm_work_struct *work)
+void atbm_bss_loss_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, bss_loss_work.work);
@@ -2036,7 +2027,7 @@ report:
 		timeout = 0;
 	}
 
-	atbm_hw_cancel_delayed_work(&priv->connection_loss_work,true);
+	atbm_cancle_delayed_work(&priv->connection_loss_work,true);
 	atbm_hw_priv_queue_delayed_work(hw_priv,
 		&priv->connection_loss_work,
 		timeout * HZ / 10);
@@ -2046,7 +2037,7 @@ report:
 	spin_unlock_bh(&priv->bss_loss_lock);
 }
 
-void atbm_connection_loss_work(struct atbm_work_struct *work)
+void atbm_connection_loss_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif,
@@ -2058,7 +2049,7 @@ void atbm_connection_loss_work(struct atbm_work_struct *work)
 	ieee80211_connection_loss(priv->vif);
 }
 
-void atbm_tx_failure_work(struct atbm_work_struct *work)
+void atbm_tx_failure_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, tx_failure_work);
@@ -2330,7 +2321,7 @@ int atbm_setup_mac(struct atbm_common *hw_priv)
 	return 0;
 }
 #ifdef CONFIG_ATBM_SUPPORT_P2P
-void atbm_pending_offchanneltx_work(struct atbm_work_struct *work)
+void atbm_pending_offchanneltx_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 	container_of(work, struct atbm_vif, pending_offchanneltx_work.work);
@@ -2346,7 +2337,7 @@ void atbm_pending_offchanneltx_work(struct atbm_work_struct *work)
 	mutex_unlock(&hw_priv->conf_mutex);
 }
 
-void atbm_offchannel_work(struct atbm_work_struct *work)
+void atbm_offchannel_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, offchannel_work);
@@ -2430,7 +2421,7 @@ void atbm_restart_join_bss(struct atbm_vif *priv,struct cfg80211_bss *bss)
 	int ret = 0;
 	struct wsm_protected_mgmt_policy mgmt_policy;
 	frame.skb = ieee80211_probereq_get(hw_priv->hw, priv->vif, NULL, 0,
-		vif_to_sdata(priv->vif)->last_scan_ie, vif_to_sdata(priv->vif)->last_scan_ie_len,NULL);
+		vif_to_sdata(priv->vif)->last_scan_ie, vif_to_sdata(priv->vif)->last_scan_ie_len);
 	if (!frame.skb)
 		return;
 	
@@ -2596,7 +2587,7 @@ void atbm_restart_join_bss(struct atbm_vif *priv,struct cfg80211_bss *bss)
 #endif
 	}
 }
-void atbm_join_work(struct atbm_work_struct *work)
+void atbm_join_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, join_work);
@@ -2650,7 +2641,7 @@ void atbm_join_work(struct atbm_work_struct *work)
 		atbm_unjoin_work(&priv->unjoin_work);
 	}
 
-	atbm_hw_cancel_delayed_work(&priv->join_timeout,true);
+	atbm_cancle_delayed_work(&priv->join_timeout,true);
 
 	bss = ieee80211_atbm_get_authen_bss(priv->vif, hw_priv->channel,
 			bssid, NULL, 0);
@@ -2806,7 +2797,7 @@ void atbm_join_work(struct atbm_work_struct *work)
 #else
 			atbm_queue_remove(queue, hw_priv->pending_frame_id);
 #endif /*CONFIG_ATBM_APOLLO_TESTMODE*/
-			atbm_hw_cancel_delayed_work(&priv->join_timeout,true);
+			atbm_cancle_delayed_work(&priv->join_timeout,true);
 #ifdef CONFIG_ATBM_SUPPORT_P2P
 #ifdef ATBM_P2P_CHANGE
 			if(priv->if_id == 0){
@@ -2868,7 +2859,7 @@ void atbm_join_work(struct atbm_work_struct *work)
 	wsm_unlock_tx(hw_priv);
 }
 
-void atbm_join_timeout(struct atbm_work_struct *work)
+void atbm_join_timeout(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, join_timeout.work);
@@ -2881,7 +2872,7 @@ void atbm_join_timeout(struct atbm_work_struct *work)
 	atbm_unjoin_work(&priv->unjoin_work);
 }
 
-void atbm_unjoin_work(struct atbm_work_struct *work)
+void atbm_unjoin_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, unjoin_work);
@@ -2903,7 +2894,7 @@ void atbm_unjoin_work(struct atbm_work_struct *work)
 		return;
 	}
 #ifdef CONFIG_ATBM_BA_STATUS
-	atbm_del_timer_sync(&hw_priv->ba_timer);
+	del_timer_sync(&hw_priv->ba_timer);
 #endif
 	mutex_lock(&hw_priv->conf_mutex);
 	if (unlikely(atomic_read(&hw_priv->scan.in_progress)
@@ -2940,9 +2931,9 @@ void atbm_unjoin_work(struct atbm_work_struct *work)
 		atbm_printk_sta("%s:join_status(%d),if_id(%d)\n",__func__,
 			priv->join_status,priv->if_id);
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
-		atbm_hw_cancel_queue_work(&priv->update_filtering_work,true);
+		atbm_cancle_queue_work(&priv->update_filtering_work,true);
 #endif
-		atbm_hw_cancel_queue_work(&priv->set_beacon_wakeup_period_work,true);
+		atbm_cancle_queue_work(&priv->set_beacon_wakeup_period_work,true);
 		memset(&priv->join_bssid[0], 0, sizeof(priv->join_bssid));
 		priv->join_status = ATBM_APOLLO_JOIN_STATUS_PASSIVE;
 
@@ -2958,11 +2949,11 @@ void atbm_unjoin_work(struct atbm_work_struct *work)
 			sta_printk(KERN_ERR "atbm_unjoin_work:chantype_change_work+++++\n");
 #ifdef CONFIG_ATBM_40M_AUTO_CCA
 			mutex_unlock(&hw_priv->conf_mutex);
-			if(atbm_hw_cancel_delayed_work(&priv->chantype_change_work,false))
+			if(atbm_cancle_delayed_work(&priv->chantype_change_work,false))
 					atbm_channel_type_change_work(&priv->chantype_change_work.work);
-			if(atbm_work_pending(&hw_priv->get_cca_work))
+			if(work_pending(&hw_priv->get_cca_work))
 			{
-				atbm_hw_cancel_queue_work(&hw_priv->get_cca_work,true);
+				atbm_cancle_queue_work(&hw_priv->get_cca_work,true);
 				atbm_get_cca_work(&hw_priv->get_cca_work);
 			}
 			mutex_lock(&hw_priv->conf_mutex);
@@ -2982,9 +2973,9 @@ void atbm_unjoin_work(struct atbm_work_struct *work)
 		priv->cipherType = 0;
 		WARN_ON(atbm_setup_mac_pvif(priv));
 		atbm_free_event_queue(hw_priv);
-		atbm_hw_cancel_queue_work(&hw_priv->event_handler,true);
+		atbm_cancle_queue_work(&hw_priv->event_handler,true);
 #ifndef CONFIG_TX_NO_CONFIRM
-		atbm_hw_cancel_delayed_work(&priv->connection_loss_work,true);
+		atbm_cancle_delayed_work(&priv->connection_loss_work,true);
 #endif
 		WARN_ON(wsm_set_block_ack_policy(hw_priv,
 			0, hw_priv->ba_tid_rx_mask, priv->if_id));
@@ -3075,10 +3066,6 @@ int atbm_enable_listening(struct atbm_vif *priv,
 		.probeDelay = 0,
 		.basicRateSet = 0x0F,
 	};
-	if((priv->vif->type == NL80211_IFTYPE_P2P_CLIENT) || (priv->vif->type == NL80211_IFTYPE_P2P_GO)){
-		start.mode |= BIT(6);
-		atbm_printk_err("[P2P MODE] SET BIT(6)");
-	}
 #ifdef P2P_MULTIVIF
 	if(priv->if_id != 2) {
 		WARN_ON(priv->join_status > ATBM_APOLLO_JOIN_STATUS_MONITOR);
@@ -3148,6 +3135,8 @@ int atbm_disable_listening(struct atbm_vif *priv)
 static int atbm_sta_enable_listen(struct atbm_vif *priv)
 {
 	struct atbm_common *hw_priv = ABwifi_vifpriv_to_hwpriv(priv);
+	struct atbm_vif *other_priv;
+	int i;
 	int ret = 0;
 	struct ieee80211_channel *chan = NULL;
 
@@ -3158,6 +3147,22 @@ static int atbm_sta_enable_listen(struct atbm_vif *priv)
 	   atbm_printk_err("%s:join status err(%d)\n",__func__,priv->join_status);
 	   return -1;
 	}
+	atbm_hw_vif_read_lock(&hw_priv->vif_list_lock);
+	atbm_for_each_vif_safe(hw_priv, other_priv, i) 
+	{
+		if (!other_priv)
+			continue;
+		if(other_priv == priv)
+			continue;
+		if(other_priv->join_status != ATBM_APOLLO_JOIN_STATUS_PASSIVE){			
+			 atbm_printk_err("%s:other join status err(%d)\n",__func__,other_priv->join_status);
+			 if(hw_priv->sta_listen_if_save == -1)
+			 	hw_priv->sta_listen_if_save = priv->if_id;
+			 atbm_hw_vif_read_unlock(&hw_priv->vif_list_lock);
+			 return -1;
+		}
+	}
+	atbm_hw_vif_read_unlock(&hw_priv->vif_list_lock);
 	
 	rcu_read_lock();
 	chan = rcu_dereference(hw_priv->sta_listen_channel);
@@ -3225,7 +3230,7 @@ int atbm_sta_triger_listen(struct ieee80211_hw *hw,struct ieee80211_vif *vif,str
 		atbm_printk_err("%s:priv is not enable\n",__func__);
 		return -EOPNOTSUPP;
 	}
-	atbm_flush_workqueue(hw_priv->workqueue);
+	flush_workqueue(hw_priv->workqueue);
 	mutex_lock(&hw_priv->conf_mutex);
 	rcu_assign_pointer(hw_priv->sta_listen_channel,chan);
 	synchronize_rcu();
@@ -3257,7 +3262,7 @@ int atbm_sta_stop_listen(struct ieee80211_hw *hw,struct ieee80211_vif *vif)
 		return -EOPNOTSUPP;
 	}
 	
-	atbm_flush_workqueue(hw_priv->workqueue);
+	flush_workqueue(hw_priv->workqueue);
 
 	mutex_lock(&hw_priv->conf_mutex);
 	atbm_sta_disable_listen(priv);
@@ -3308,7 +3313,7 @@ int atbm_set_uapsd_param(struct atbm_vif *priv,
 	return ret;
 }
 #ifdef CONFIG_ATBM_BA_STATUS
-void atbm_ba_work(struct atbm_work_struct *work)
+void atbm_ba_work(struct work_struct *work)
 {
 	struct atbm_common *hw_priv =
 		container_of(work, struct atbm_common, ba_work);
@@ -3373,7 +3378,7 @@ void atbm_ba_timer(unsigned long arg)
 #if 0
 			sta_printk( "[STA] %s block ACK:\n",
 				ba_ena ? "enable" : "disable");
-			atbm_queue_work(hw_priv->workqueue, &hw_priv->ba_work);
+			queue_work(hw_priv->workqueue, &hw_priv->ba_work);
 #endif
 		}
 	} else if (hw_priv->ba_hist)
@@ -3387,49 +3392,49 @@ void atbm_vif_setup_params(struct atbm_vif *priv)
 {
 	/* Setup per vif workitems and locks */
 	spin_lock_init(&priv->vif_lock);
-	ATBM_INIT_WORK(&priv->join_work, atbm_join_work);
-	ATBM_INIT_DELAYED_WORK(&priv->join_timeout, atbm_join_timeout);
-	ATBM_INIT_WORK(&priv->unjoin_work, atbm_unjoin_work);
-	ATBM_INIT_WORK(&priv->wep_key_work, atbm_wep_key_work);
+	INIT_WORK(&priv->join_work, atbm_join_work);
+	INIT_DELAYED_WORK(&priv->join_timeout, atbm_join_timeout);
+	INIT_WORK(&priv->unjoin_work, atbm_unjoin_work);
+	INIT_WORK(&priv->wep_key_work, atbm_wep_key_work);
 #ifdef CONFIG_ATBM_SUPPORT_P2P
-	ATBM_INIT_WORK(&priv->offchannel_work, atbm_offchannel_work);
-	ATBM_INIT_DELAYED_WORK(&priv->pending_offchanneltx_work,
+	INIT_WORK(&priv->offchannel_work, atbm_offchannel_work);
+	INIT_DELAYED_WORK(&priv->pending_offchanneltx_work,
 			atbm_pending_offchanneltx_work);
 #endif
 #ifndef CONFIG_TX_NO_CONFIRM
-	ATBM_INIT_DELAYED_WORK(&priv->bss_loss_work, atbm_bss_loss_work);
-	ATBM_INIT_DELAYED_WORK(&priv->connection_loss_work,
+	INIT_DELAYED_WORK(&priv->bss_loss_work, atbm_bss_loss_work);
+	INIT_DELAYED_WORK(&priv->connection_loss_work,
 			  atbm_connection_loss_work);
 	spin_lock_init(&priv->bss_loss_lock);
-	ATBM_INIT_WORK(&priv->tx_failure_work, atbm_tx_failure_work);
+	INIT_WORK(&priv->tx_failure_work, atbm_tx_failure_work);
 #endif
 	spin_lock_init(&priv->ps_state_lock);
-//	ATBM_INIT_DELAYED_WORK(&priv->set_cts_work, atbm_set_cts_work);
-	ATBM_INIT_WORK(&priv->set_tim_work, atbm_set_tim_work);
-	ATBM_INIT_WORK(&priv->multicast_start_work, atbm_multicast_start_work);
-	ATBM_INIT_WORK(&priv->multicast_stop_work, atbm_multicast_stop_work);
-	ATBM_INIT_WORK(&priv->link_id_work, atbm_link_id_work);
-	ATBM_INIT_DELAYED_WORK(&priv->link_id_gc_work, atbm_link_id_gc_work);
+//	INIT_DELAYED_WORK(&priv->set_cts_work, atbm_set_cts_work);
+	INIT_WORK(&priv->set_tim_work, atbm_set_tim_work);
+	INIT_WORK(&priv->multicast_start_work, atbm_multicast_start_work);
+	INIT_WORK(&priv->multicast_stop_work, atbm_multicast_stop_work);
+	INIT_WORK(&priv->link_id_work, atbm_link_id_work);
+	INIT_DELAYED_WORK(&priv->link_id_gc_work, atbm_link_id_gc_work);
 #if 0
-	ATBM_INIT_WORK(&priv->linkid_reset_work, atbm_link_id_reset);
+	INIT_WORK(&priv->linkid_reset_work, atbm_link_id_reset);
 #endif
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
-	ATBM_INIT_WORK(&priv->update_filtering_work, atbm_update_filtering_work);
+	INIT_WORK(&priv->update_filtering_work, atbm_update_filtering_work);
 #endif
-	ATBM_INIT_WORK(&priv->set_beacon_wakeup_period_work,
+	INIT_WORK(&priv->set_beacon_wakeup_period_work,
 		atbm_set_beacon_wakeup_period_work);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,3,0))
-    ATBM_INIT_WORK(&priv->ht_info_update_work, atbm_ht_info_update_work);
+    INIT_WORK(&priv->ht_info_update_work, atbm_ht_info_update_work);
 #endif
 #ifdef ATBM_SUPPORT_WIDTH_40M	
 #ifdef CONFIG_ATBM_40M_AUTO_CCA
-	ATBM_INIT_DELAYED_WORK(&priv->chantype_change_work, atbm_channel_type_change_work);
+	INIT_DELAYED_WORK(&priv->chantype_change_work, atbm_channel_type_change_work);
 #endif
 #endif
-	atbm_init_timer(&priv->mcast_timeout);
+	init_timer(&priv->mcast_timeout);
 	//DHCP
 	spin_lock_init(&priv->dhcp_retry_spinlock);
-	ATBM_INIT_DELAYED_WORK(&priv->dhcp_retry_work, atbm_dhcp_retry_work);
+	INIT_DELAYED_WORK(&priv->dhcp_retry_work, atbm_dhcp_retry_work);
 	spin_lock_bh(&priv->dhcp_retry_spinlock);
 	priv->dhcp_retry_skb=NULL;
 	spin_unlock_bh(&priv->dhcp_retry_spinlock);
@@ -3532,7 +3537,7 @@ int atbm_setup_mac_pvif(struct atbm_vif *priv)
 	return ret;
 }
 #ifdef CONFIG_ATBM_SUPPORT_P2P
-void atbm_rem_chan_timeout(struct atbm_work_struct *work)
+void atbm_rem_chan_timeout(struct work_struct *work)
 {
 	struct atbm_common *hw_priv =
 		container_of(work, struct atbm_common, rem_chan_timeout.work);

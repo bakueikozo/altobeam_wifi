@@ -10,6 +10,10 @@ config ATBM_APOLLO
     select CRYPTO_AES
     select CRC32
     select AVERAGE
+    select MAC80211_ATBM_HAS_RC
+    select MAC80211_ATBM_RC_MINSTREL
+    select MAC80211_ATBM_RC_MINSTREL_HT
+    select MAC80211_ATBM_RC_DEFAULT_MINSTREL
     depends on !ATBM_MENUCONFIG
     help
 
@@ -18,20 +22,14 @@ config ATBM_APOLLO
     any platform support.
  
     Please select the appropriate platform below.
-config ATBM_WEXT
-	tristate "support wireless wext"
-	select WIRELESS_EXT
-	select WEXT_PRIV
-	---help---
-		only select WEIRELESS_EXT and WEXT_PRIV
   
 if ATBM_MENUCONFIG || ATBM_APOLLO
 choice
-    prompt "select which atbm Wi-Fi product  will be used:ATBM601x,ATBM602x,ATBM603x,ATBM604x,default:ATBM602x"
-    default ATBM603x
+    prompt "select which atbm Wi-Fi product  will be used:ATBM601x,ATBM602x,default:ATBM602x"
+    default ATBM602x
     depends on ATBM_MENUCONFIG || ATBM_APOLLO
     help
-     Here,you must make sure which atbm Wi-Fi product you will want to use,ATBM601x,ATBM602x,ATBM603x,ATBM604x
+     Here,you must make sure which atbm Wi-Fi product you will want to use,ATBM601x,ATBM602x
 config ATBM601x
     bool "ATBM601x chip"
     depends on ATBM_MENUCONFIG || ATBM_APOLLO
@@ -47,13 +45,6 @@ config ATBM603x
     depends on ATBM_MENUCONFIG || ATBM_APOLLO
     help
      we will use ATBM603x chip
-
-config ATBM6012B_COMB
-	bool "ATBM6012B chip"
-	depends on  (ATBM_MENUCONFIG || ATBM_APOLLO) && ATBM603x && ATBM_USB_BUS
-	help
-		ATBM603X Compatible with the ATBM6012B
-
 config ATBM6041
     bool "ATBM6041 chip"
     depends on ATBM_MENUCONFIG || ATBM_HERA
@@ -149,9 +140,6 @@ config ATBM_FUNC_MEM_DEBUG
 config ATBM_FUNC_CHANNEL_5G_PRETEND_2G
     bool "Enable 2.4g useing 5g channel function ,only support special frequnce"
     default n
-config ATBM_WITHBAND_ONLY_HT20
-    bool "Enable only support HT20"
-    default y
 config ATBM_FUNC_USB_AGGRTX
     bool "Enabel usb aggr tx funciton to enchance tx performance"
     depends on ATBM_USB_BUS
@@ -188,26 +176,23 @@ config ATBM_FUNC_P2P_ENABLE
     default n
 config ATBM_FUNC_SW_ENC
     bool "enable sw enc function"
-    default y
+    default n
 config ATBM_FUNC_DEV_CTRL_API
     bool "enabel dev_ctrl api"
-    default y
+    default n
 config ATBM_FUNC_MODULE_FS
     bool "enable modules fs"
-    default y
+    default n
 config ATBM_FUNC_SMARTCONFIG
     bool "enable smartconfig function"
     default n 
 config ATBM_FUNC_DRV_LOADER_FAST
 	bool "Enable loader driver fast function"
 	depends on ATBM_USB_BUS
-	default y
+	default n
 config ATBM_FUNC_PRIVE_IE
 	bool "Enable iwpriv some prive func"
 	default n
-config ATBM_FUNC_SAE_AUTHEN
-	bool "Enable WPA3 support,but make sure the kernel support sae before enabled"
-	default y
 endmenu
 
 menu "Driver debug features"
@@ -302,16 +287,10 @@ config ATBM_WIFIIF1_NAME
     default "wlan%d"
     help
       Set name for wireless interface 1,the length of name is must smaller than 15
-config NEED_P2P0_INTERFACE
-	bool "ENABLE scond interface"
-	depends on ATBM_MENUCONFIG || ATBM_APOLLO
-	default y
-	help
-		enable scond interface,default p2p0
-		
+
 config ATBM_WIFIIF2_NAME
     string "Setting wifi interface 2 name"
-    depends on (ATBM_MENUCONFIG || ATBM_APOLLO) && NEED_P2P0_INTERFACE
+    depends on ATBM_MENUCONFIG || ATBM_APOLLO
     default "p2p%d"
     help
      set name for wireless interface 2,the length of name is must smaller than 15
@@ -325,15 +304,15 @@ config ATBM_MODULE_PM_STAYAWK
 
 config ATBM_MODULE_DRIVER_NAME
     string "Setting wifi module driver name"
-    depends on (ATBM_MENUCONFIG || ATBM_APOLLO) && (ATBM_USB_BUS || ATBM_SDIO_BUS)
+    depends on (ATBM_MENUCONFIG || ATBM_APOLLO) && ATBM_USB_BUS
     default "atbm_wlan"
     help
      set name for wireless interface 2,the length of name is must smaller than 15
 
 config ATBM_PLATFORM_DEVICE_NAME
     string "Setting wifi platform device name"
-    depends on (ATBM_MENUCONFIG || ATBM_APOLLO) && (ATBM_USB_BUS || ATBM_SDIO_BUS)
-    default "atbm_dev_wifi"
+    depends on (ATBM_MENUCONFIG || ATBM_APOLLO) && ATBM_USB_BUS
+    default "atbmusbwifi"
     help
      set name for wireless platform device name,the length of name is must smaller than 15
      
@@ -351,19 +330,7 @@ config ATBM_USB_PID
     help
      set usb enumeration product id ,value is hex
 
-config ATBM_SDIO_VID
-    hex "Setting wifi sdio vid"
-    depends on (ATBM_MENUCONFIG || ATBM_APOLLO) && ATBM_SDIO_BUS
-    default 0x007a
-    help
-     set SDIO enumeration vendor id ,value is hex
 
-config ATBM_SDIO_PID
-    hex "Setting wifi sdio pid"
-    depends on (ATBM_MENUCONFIG || ATBM_APOLLO) && ATBM_SDIO_BUS
-    default 0x6011
-    help
-     set SDIO enumeration product id ,value is hex
 
 config ATBM_MODULE_NAME
     string "set module name"

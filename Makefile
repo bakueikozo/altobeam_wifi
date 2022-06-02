@@ -30,10 +30,10 @@ CUSTOMER_SUPPORT_USED=y
 #PLATFORM_XUNWEI_2G                            20
 #PLATFORM_NVT98517       21
 export
-platform ?= PLATFORM_SIGMASTAR
+platform ?= PLATFORM_INGENICT31
 #Android
 #Linux
-sys ?= Linux
+sys ?= linux
 #arch:arm or arm64 or mips(NVT98517)
 arch ?= arm
 #export 
@@ -58,6 +58,20 @@ endif
 
 ifeq ($(KERNELRELEASE),)
 export DRIVER_PATH ?= $(shell pwd)
+
+ifeq ($(platform),PLATFORM_INGENICT31)
+ifeq ($(sys),linux)
+#KERDIR=/home/chenx/codegit/platform_t31_sdk/kernel
+CUR_DIR := $(shell pwd)
+KERDIR=$(CUR_DIR)/../../kernel
+CROSS_COMPILE:=mips-linux-gnu-
+endif
+export
+arch = mips
+ATBM_WIFI__EXT_CCFLAGS = -DATBM_WIFI_PLATFORM=22
+endif
+
+
 ifeq ($(platform),PLATFORM_HS_IPC)
 KERDIR:=/wifi_prj/staff/jilechang/HS_IPC_1115/kernel
 CROSS_COMPILE:=/wifi_prj/staff/jilechang/HS_IPC_1115/opt/arm-anykav200-crosstool/usr/bin/arm-anykav200-linux-uclibcgnueabi-
@@ -112,9 +126,9 @@ ATBM_WIFI__EXT_CCFLAGS = -DATBM_WIFI_PLATFORM=11
 endif
 
 ifeq ($(platform),PLATFORM_SIGMASTAR)
-ifeq ($(sys),Linux)
-KERDIR:=/usr/lchome/yuzhihuang/Mstar/IPC_I3/linux3.18_i3/
-CROSS_COMPILE:=/usr/lchome/yuzhihuang/Mstar/IPC_I3/arm-linux-gnueabihf-4.8.3-201404/bin/arm-linux-gnueabihf-
+ifeq ($(sys),linux)
+KERDIR:=/usr/lchome/yuzhihuang/Mstar/325/kernel
+CROSS_COMPILE:=/usr/lchome/yuzhihuang/Mstar/325/arm-buildroot-linux-uclibcgnueabihf-4.9.4/bin/arm-buildroot-linux-uclibcgnueabihf-
 else
 #KERDIR:=/wifi_prj/staff/zhouzhanchao/iTop4412_Kernel_3.0/
 #KERDIR:=/wifi_prj/wuping/project/linux/iTop4412_Kernel_3.0/
@@ -353,6 +367,17 @@ endif
 ifeq ($(platform),PLATFORM_NVT98517)
 export
 ATBM_WIFI__EXT_CCFLAGS = -DATBM_WIFI_PLATFORM=14
+endif
+
+ifeq ($(platform),PLATFORM_SIGMASTAR)
+export
+ATBM_WIFI__EXT_CCFLAGS = -DATBM_WIFI_PLATFORM=18
+endif
+
+
+ifeq ($(platform),PLATFORM_SIGMASTAR)
+export
+ATBM_WIFI__EXT_CCFLAGS = -DPLATFORM_INGENICT31=22
 endif
 export 
 include $(src)/Makefile.build.kernel

@@ -25,7 +25,7 @@
 /* DPLL initial values */
 #define DPLL_INIT_VAL_9000		(0x00000191)
 #define DPLL_INIT_VAL_CW1200		(0x0EC4F121)
-#define MAX_RETRY		3
+#define MAX_RETRY		10
 #define SDIO_TX_MAXLEN 4096*8
 
 #define ALTOBEAM_WIFI_HDR_FLAG  (0x34353677)
@@ -39,9 +39,8 @@
 #define DOWNLOAD_DTCM_SIZE		(48*1024)
 
 
-//#define DOWNLOAD_BLOCK_SIZE		(128)
+#define DOWNLOAD_BLOCK_SIZE		(128)
 
-#define DOWNLOAD_BLOCK_SIZE		(508)
 
 
 

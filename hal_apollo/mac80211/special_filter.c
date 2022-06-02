@@ -42,16 +42,66 @@ struct ieee80211_special_filter_request{
 union ieee80211_special_filter_cb{
 	struct ieee80211_special_filter_request request;
 };
+
+/*      0800    IP
+ *      8100    802.1Q VLAN
+ *      0001    802.3
+ *      0002    AX.25
+ *      0004    802.2
+ *      8035    RARP
+ *      0005    SNAP
+ *      0805    X.25
+ *      0806    ARP
+ *      8137    IPX
+ *      0009    Localtalk
+ *      86DD    IPv6
+ */
+ /*
+@skb : 
+@dev ¡êo
+
+
+
+*/
+#define ETH_P_CUSTOM 0x88cc
+static int ieee80211_send_L2_2_hight_layer(struct sk_buff *skb,struct net_device *dev)
+{
+	int res = -1;
+	if (skb && dev) {
+		skb->dev = dev;		
+		eth_type_trans(skb, dev);
+		skb->protocol = htons(ETH_P_CUSTOM);
+		skb->pkt_type = PACKET_OTHERHOST;
+		memset(skb->cb, 0, sizeof(skb->cb));
+		if(skb->len > 0){
+		//	printk("kernel : send data len = %d \n",skb->len);
+			res = atbm_netif_receive_skb(skb);
+		}else{
+			printk("skb->len = 0 \n");
+		}
+	}else{
+		printk("skb=%p dev=%p \n",skb,dev);
+	}
+	return res;
+}
+
 static void ieee80211_special_filter_rx_package_handle(struct ieee80211_sub_if_data *sdata,struct sk_buff *skb)
 {
+
+
+	struct net_device *dev = sdata->dev;
 	struct atbm_ieee80211_mgmt *mgmt = (struct atbm_ieee80211_mgmt *)skb->data;
 	u8 *elements;
 	int baselen;
 	struct ieee802_atbm_11_elems elems;
 	struct ieee80211_rx_status *rx_status = IEEE80211_SKB_RXCB(skb);
+//	struct ieee80211_local *local = sdata->local;
 	int freq;
 	char ssid[32]={0};
 	const u8 *ie = NULL;
+//	unsigned long flags;
+	
+	
 	if(ieee80211_is_beacon(mgmt->frame_control)){
 		
 		//ie = atbm_ieee80211_find_ie(ATBM_WLAN_EID_SSID,mgmt->u.beacon.variable,
@@ -69,9 +119,12 @@ static void ieee80211_special_filter_rx_package_handle(struct ieee80211_sub_if_d
 			freq = rx_status->freq;
 
 		memcpy(ssid,elems.ssid,elems.ssid_len);
-		freq = (freq-2407)/5;
-
-		ie = atbm_ieee80211_find_ie(ATBM_WLAN_EID_PRIVATE,mgmt->u.beacon.variable,
+		//if(freq <= 2484)
+		//	freq = (freq-2407)/5;
+		//else
+		//	freq = (freq-2407)/5;
+		
+		ie = atbm_ieee80211_find_ie(ATBM_WLAN_EID_PRIVATE,(const u8 *)mgmt->u.beacon.variable,
 				                   skb->len-offsetof(struct atbm_ieee80211_mgmt, u.beacon.variable));
 		
 		
@@ -79,8 +132,12 @@ static void ieee80211_special_filter_rx_package_handle(struct ieee80211_sub_if_d
 			char special_data[255]={0};
 			memcpy(special_data,ie+2,ie[1]);
 			atbm_printk_debug("[beacon] from [%pM] channel[%d] ssid[%s] ie[%d][%d][%s]\n",mgmt->bssid,freq,ssid,ie[0],ie[1],special_data);
+
+			
+
 		}else{
 			atbm_printk_debug("[beacon] from [%pM] channel[%d] ssid[%s] \n",mgmt->bssid,freq,ssid);
+			
 		}
 		
 	}else if(ieee80211_is_probe_req(mgmt->frame_control)){
@@ -97,10 +154,10 @@ static void ieee80211_special_filter_rx_package_handle(struct ieee80211_sub_if_d
 		else
 			freq = rx_status->freq;
 		
-		freq = (freq-2407)/5;
+	//	freq = (freq-2407)/5;
 
 		
-		ie = atbm_ieee80211_find_ie(ATBM_WLAN_EID_PRIVATE,mgmt->u.probe_req.variable,
+		ie = atbm_ieee80211_find_ie(ATBM_WLAN_EID_PRIVATE,(const u8 *)mgmt->u.probe_req.variable,
 				                   skb->len-offsetof(struct atbm_ieee80211_mgmt, u.probe_req.variable));
 		
 		
@@ -114,8 +171,21 @@ static void ieee80211_special_filter_rx_package_handle(struct ieee80211_sub_if_d
 		
 	}else {
 		atbm_printk_debug("[others][%x] from [%pM]\n",mgmt->frame_control,mgmt->sa);
+		
 	}
-	atbm_dev_kfree_skb(skb);
+
+	/*
+		send skb data to hight layer	
+	*/
+	if(ieee80211_send_L2_2_hight_layer(skb,dev) < 0){
+		atbm_printk_err("[error] ieee80211_send_L2_2_hight_layer err! \n ");
+		if(skb)
+		atbm_dev_kfree_skb(skb);
+	}
+	/*
+		if not send to hight layer must free skb
+	*/
+	//atbm_dev_kfree_skb(skb);
 }
 
 static void ieee80211_special_filter_register_handle(struct ieee80211_sub_if_data *sdata,struct sk_buff *skb)
@@ -200,7 +270,7 @@ static void ieee80211_special_filter_request_handle(struct ieee80211_sub_if_data
 
 	atbm_dev_kfree_skb(skb);
 }
-static void ieee80211_special_filter_work(struct atbm_work_struct *work)
+static void ieee80211_special_filter_work(struct work_struct *work)
 {
 	struct ieee80211_sub_if_data *sdata =
 		container_of(work, struct ieee80211_sub_if_data, special_filter_work);
@@ -270,7 +340,7 @@ static void ieee80211_special_filter_queue_request(struct ieee80211_sub_if_data 
 void ieee80211_special_filter_init(struct ieee80211_sub_if_data *sdata)
 {
 	atbm_skb_queue_head_init(&sdata->special_filter_skb_queue);
-	ATBM_INIT_WORK(&sdata->special_filter_work, ieee80211_special_filter_work);
+	INIT_WORK(&sdata->special_filter_work, ieee80211_special_filter_work);
 	atomic_set(&sdata->special_enable,1);
 	INIT_LIST_HEAD(&sdata->filter_list);
 }
@@ -278,7 +348,7 @@ void ieee80211_special_filter_init(struct ieee80211_sub_if_data *sdata)
 void ieee80211_special_filter_exit(struct ieee80211_sub_if_data *sdata)
 {
 	atomic_set(&sdata->special_enable,0);
-	atbm_cancel_work_sync(&sdata->special_filter_work);
+	cancel_work_sync(&sdata->special_filter_work);
 	atbm_skb_queue_purge(&sdata->special_filter_skb_queue);
 	ieee80211_special_filter_clear_handle(sdata,NULL);
 }
@@ -340,7 +410,7 @@ bool ieee80211_special_filter_request(struct ieee80211_sub_if_data *sdata,
 	
 	ieee80211_special_filter_queue_request(sdata,skb);
 	
-	atbm_flush_workqueue(sdata->local->workqueue);
+	flush_workqueue(sdata->local->workqueue);
 	
 	return true;
 }
@@ -363,7 +433,6 @@ void ieee80211_special_check_package(struct ieee80211_local *local,struct sk_buf
 	struct atbm_ieee80211_mgmt *mgmt = (struct atbm_ieee80211_mgmt *)skb->data;
 	u8 is_beacon = ieee80211_is_beacon(mgmt->frame_control);
 	u8 is_probereq = ieee80211_is_probe_req(mgmt->frame_control);
-	u8 is_proberesp = ieee80211_is_probe_resp(mgmt->frame_control);
 	u8 keep = 0;
 
 	if(!(is_beacon || is_probereq)){
@@ -384,8 +453,7 @@ void ieee80211_special_check_package(struct ieee80211_local *local,struct sk_buf
 		list_for_each_entry(filter_temp, &sdata->filter_list, list){
 			if(filter_temp->filter.flags & SPECIAL_F_FLAGS_FRAME_TYPE){
 				if( (is_beacon && filter_temp->filter.filter_action == 0x80) || 
-					(is_probereq && filter_temp->filter.filter_action == 0x40)|| 
-					(is_proberesp && filter_temp->filter.filter_action == 0x50)){
+					(is_probereq && filter_temp->filter.filter_action == 0x40)){
 					keep = 1;
 					break;
 				}
@@ -397,12 +465,9 @@ void ieee80211_special_check_package(struct ieee80211_local *local,struct sk_buf
 				if(is_beacon){
 					pos = mgmt->u.beacon.variable;
 					ie_len = skb->len - offsetof(struct atbm_ieee80211_mgmt, u.beacon.variable);
-				}else if(is_probereq){
+				}else {
 					pos = mgmt->u.probe_req.variable;
 					ie_len = skb->len - offsetof(struct atbm_ieee80211_mgmt, u.probe_req.variable);
-				}else{
-					pos = mgmt->u.probe_resp.variable;
-					ie_len = skb->len - offsetof(struct atbm_ieee80211_mgmt, u.probe_resp.variable);
 				}
 next:
 				//atbm_printk_debug("%s:pos(%p),ie_len(%d)\n",__func__,pos,ie_len);

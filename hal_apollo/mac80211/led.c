@@ -193,7 +193,7 @@ static void tpt_trig_timer(unsigned long data)
 	if (!tpt_trig->running)
 		return;
 
-	atbm_mod_timer(&tpt_trig->timer, round_jiffies(jiffies + HZ));
+	mod_timer(&tpt_trig->timer, round_jiffies(jiffies + HZ));
 
 	tpt = tpt_trig_traffic(local, tpt_trig);
 
@@ -240,7 +240,7 @@ char *__ieee80211_create_tpt_led_trigger(struct ieee80211_hw *hw,
 	tpt_trig->blink_table_len = blink_table_len;
 	tpt_trig->want = flags;
 
-	atbm_setup_timer(&tpt_trig->timer, tpt_trig_timer, (unsigned long)local);
+	setup_timer(&tpt_trig->timer, tpt_trig_timer, (unsigned long)local);
 
 	local->tpt_led_trigger = tpt_trig;
 
@@ -260,7 +260,7 @@ static void ieee80211_start_tpt_led_trig(struct ieee80211_local *local)
 	tpt_trig->running = true;
 
 	tpt_trig_timer((unsigned long)local);
-	atbm_mod_timer(&tpt_trig->timer, round_jiffies(jiffies + HZ));
+	mod_timer(&tpt_trig->timer, round_jiffies(jiffies + HZ));
 }
 
 static void ieee80211_stop_tpt_led_trig(struct ieee80211_local *local)
@@ -272,7 +272,7 @@ static void ieee80211_stop_tpt_led_trig(struct ieee80211_local *local)
 		return;
 
 	tpt_trig->running = false;
-	atbm_del_timer_sync(&tpt_trig->timer);
+	del_timer_sync(&tpt_trig->timer);
 
 	read_lock(&tpt_trig->trig.leddev_list_lock);
 	list_for_each_entry(led_cdev, &tpt_trig->trig.led_cdevs, trig_list)

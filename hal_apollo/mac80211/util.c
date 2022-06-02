@@ -597,19 +597,19 @@ static bool ieee80211_can_queue_work(struct ieee80211_local *local)
 	return true;
 }
 
-void ieee80211_queue_work(struct ieee80211_hw *hw, struct atbm_work_struct *work)
+void ieee80211_queue_work(struct ieee80211_hw *hw, struct work_struct *work)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
 
 	if (!ieee80211_can_queue_work(local))
 		return;
 
-	atbm_queue_work(local->workqueue, work);
+	queue_work(local->workqueue, work);
 }
 //EXPORT_SYMBOL(ieee80211_queue_work);
 
 void ieee80211_queue_delayed_work(struct ieee80211_hw *hw,
-				  struct atbm_delayed_work *dwork,
+				  struct delayed_work *dwork,
 				  unsigned long delay)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
@@ -617,7 +617,7 @@ void ieee80211_queue_delayed_work(struct ieee80211_hw *hw,
 	if (!ieee80211_can_queue_work(local))
 		return;
 
-	atbm_queue_delayed_work(local->workqueue, dwork, delay);
+	queue_delayed_work(local->workqueue, dwork, delay);
 }
 //EXPORT_SYMBOL(ieee80211_queue_delayed_work);
 
@@ -626,8 +626,6 @@ static int ieee802_11_parse_vendor_specific(u8 *pos, size_t elen,
 					    int show_errors)
 {
 	unsigned int oui;
-	//unsigned char i = 0,offsert = 4;
-	//int encry_type_count = 0;
 
 	/* first 3 bytes in vendor specific information element are the IEEE
 	 * OUI of the vendor. The following byte is used a vendor specific
@@ -733,12 +731,11 @@ u32 atbm_ieee802_11_parse_elems_crc(u8 *start, size_t len,
 	size_t left = len;
 	u8 *pos = start;
 	bool calc_crc = filter != 0;
-	//unsigned char i = 0,offsert = 4;
-	//int encry_type_count = 0;
+
 	memset(elems, 0, sizeof(*elems));
 	elems->ie_start = start;
 	elems->total_len = len;
-	elems->encry_info = 0;
+
 	while (left >= 2) {
 		u8 id, elen;
 
@@ -829,7 +826,6 @@ u32 atbm_ieee802_11_parse_elems_crc(u8 *start, size_t len,
 		case ATBM_WLAN_EID_RSN:
 			elems->rsn = pos;
 			elems->rsn_len = elen;
-
 			break;
 		case ATBM_WLAN_EID_ERP_INFO:
 			elems->erp_info = pos;
@@ -1053,7 +1049,7 @@ u32 ieee80211_atbm_mandatory_rates(struct ieee80211_local *local,
 }
 
 void ieee80211_send_auth(struct ieee80211_sub_if_data *sdata,
-			 u16 transaction, u16 auth_alg, u16 status,
+			 u16 transaction, u16 auth_alg,
 			 u8 *extra, size_t extra_len, const u8 *bssid,
 			 const u8 *key, u8 key_len, u8 key_idx)
 {
@@ -1080,7 +1076,7 @@ void ieee80211_send_auth(struct ieee80211_sub_if_data *sdata,
 	memcpy(mgmt->bssid, bssid, ETH_ALEN);
 	mgmt->u.auth.auth_alg = cpu_to_le16(auth_alg);
 	mgmt->u.auth.auth_transaction = cpu_to_le16(transaction);
-	mgmt->u.auth.status_code = cpu_to_le16(status);
+	mgmt->u.auth.status_code = cpu_to_le16(0);
 	if (extra)
 		memcpy(atbm_skb_put(skb, extra_len), extra, extra_len);
 	if (auth_alg == WLAN_AUTH_SHARED_KEY && transaction == 3) {
@@ -1260,7 +1256,7 @@ struct sk_buff *ieee80211_build_probe_req(struct ieee80211_sub_if_data *sdata,
 
 	skb = ieee80211_probereq_get(&local->hw, &sdata->vif,
 				     ssid, ssid_len,
-				     buf, buf_len,NULL);
+				     buf, buf_len);
 	if (!skb)
 		goto out;
 
@@ -1379,65 +1375,44 @@ bool ieee80211_send_special_probe_response(struct ieee80211_sub_if_data *sdata, 
 void ieee80211_ap_rx_queued_mgmt_special(struct ieee80211_sub_if_data *sdata,
 				  struct sk_buff *skb)
 {
-#if 1
-	  /*
-	  *the follow code is a demo , add other by yourself
-	  */
-	  struct ieee80211_rx_status *rx_status;
-	  struct atbm_ieee80211_mgmt *mgmt;
-	  struct ieee802_atbm_11_elems elems;
-	  int baselen;
-	  rx_status = (struct ieee80211_rx_status *) skb->cb;
-	  mgmt = (struct atbm_ieee80211_mgmt *)skb->data;
+#if 0
+	/*
+	*the follow code is a demo , add other by yourself
+	*/
+	struct ieee80211_rx_status *rx_status;
+	struct atbm_ieee80211_mgmt *mgmt;
+	
+	rx_status = (struct ieee80211_rx_status *) skb->cb;
+	mgmt = (struct atbm_ieee80211_mgmt *)skb->data;
 
-	  if (skb->len < 24)
-		  return;
-	  if(ieee80211_is_probe_req(mgmt->frame_control)){
-	      u8 *elements = NULL;
-		  const u8 *atbm_ie = NULL;
-		  const u8 *special = NULL;
-		  int special_len = 0;
-		  int freq;
-		  baselen = offsetof(struct atbm_ieee80211_mgmt, u.probe_req.variable);
-		  if (baselen > skb->len){
-			  atbm_printk_err("[probe req] error ! \n");
-			  return;
-		  }
-		//  elements = mgmt->u.probe_req.variable;
-		  ieee802_11_parse_elems(mgmt->u.probe_req.variable, skb->len - baselen, &elems);
-		  if (elems.ds_params && elems.ds_params_len == 1)
-			  freq = ieee80211_channel_to_frequency(elems.ds_params[0],
-								rx_status->band);
-		  else
-			  freq = rx_status->freq;
-	  
-		  elements = mgmt->u.probe_req.variable;
-		  atbm_ie = atbm_ieee80211_find_ie(ATBM_WLAN_EID_PRIVATE,elements,
-					(int)(skb->len-offsetof(struct atbm_ieee80211_mgmt, u.probe_req.variable)));
-  
-		  if(atbm_ie){
-			  char special_data[255] = {0};
-			  special_len = atbm_ie[1];
-			  special = &atbm_ie[2];
-			  memcpy(special_data,special,special_len);
-			  /*
-			  *send probe response
-			  */
-			  atbm_printk_cfg("[probe req] from [%pM] channel[%d] special ie[%d][%d][%s]\n",mgmt->sa,freq,atbm_ie[0],atbm_ie[1],special_data);
-			  memcpy(special_data,"RECV_PROBE_REQ",14);
-			  special_data[14] = 0;
-			  ieee80211_send_special_probe_response(sdata,mgmt->sa,special_data,14);
-			  
-		  }else{
-			  atbm_printk_cfg("[probe req] from [%pM] channel[%d] \n",mgmt->sa,freq);
-		  }
-	  }else {
-		  /*
-		  *other frame
-		  */	  
-	  }
+	if (skb->len < 24)
+		return;
+	
+	if(ieee80211_is_probe_req(mgmt->frame_control)){
+		const u8 *elements = NULL;
+		const u8 *atbm_ie = NULL;
+		const u8 *special = NULL;
+		int special_len = 0;
+		
+		elements = mgmt->u.probe_req.variable;
+		atbm_ie = atbm_ieee80211_find_ie(ATBM_WLAN_EID_PRIVATE,elements,
+				  (int)(skb->len-offsetof(struct atbm_ieee80211_mgmt, u.probe_req.variable)));
+
+		if(atbm_ie){
+			special_len = atbm_ie[1];
+			special = &atbm_ie[2];
+			/*
+			*send probe response
+			*/
+			atbm_printk_err("%s:sa[%pM]\n",__func__,mgmt->sa);
+			ieee80211_send_special_probe_response(sdata,mgmt->sa,special,special_len);
+		}
+	}else {
+		/*
+		*other frame
+		*/		
+	}
 #endif
-
 }
 static bool ieee80211_update_special_ie(struct ieee80211_sub_if_data *sdata,enum ieee80211_special_work_type type,
 												  const u8 *special_ie, size_t special_ie_len)
@@ -1448,61 +1423,37 @@ static bool ieee80211_update_special_ie(struct ieee80211_sub_if_data *sdata,enum
 	struct ieee80211_update_special *special_update;
 
 	if((type < IEEE80211_SPECIAL_NONE_TYPE) ||(type>IEEE80211_SPECIAL_STA_SPECIAL_PROBR)){
-		atbm_printk_err("%s _ %d \n",__func__,__LINE__);
 		res = false;
 		goto exit;
 	}
-	if((special_ie) && (special_ie_len > 0)){
-		if((!!special_ie) ^ (!!special_ie_len)){
-			atbm_printk_err("%s _ %d \n",__func__,__LINE__);
-			res = false;
-			goto exit;
-		}
 
-		skb = atbm_dev_alloc_skb(special_ie_len+2);
-
-		if(skb == NULL){
-			atbm_printk_err("%s _ %d \n",__func__,__LINE__);
-			res = false;
-			goto exit;
-		}
-		special = skb->data;
-		special[0] = ATBM_WLAN_EID_PRIVATE;
-		special[1] = special_ie_len;
-
-		memcpy(&special[2],special_ie,special_ie_len);
-		atbm_skb_put(skb,special_ie_len+2);
-		skb->pkt_type = type;
-		special_update = (struct ieee80211_update_special*)skb->cb;
-
-		special_update->req_sdata = sdata;
-		special_update->special_ie = special;
-		special_update->special_len = special_ie_len+2;
-	}else{
-		skb = atbm_dev_alloc_skb(special_ie_len+2);
-
-		if(skb == NULL){
-			atbm_printk_err("%s _ %d \n",__func__,__LINE__);
-			res = false;
-			goto exit;
-		}
-		special = skb->data;
-		special[0] = ATBM_WLAN_EID_PRIVATE;
-		special[1] = 0;
-
-	
-		skb->pkt_type = type;
-		special_update = (struct ieee80211_update_special*)skb->cb;
-
-		special_update->req_sdata = sdata;
-		special_update->special_ie = NULL;
-		special_update->special_len = 0;
+	if((!!special_ie) ^ (!!special_ie_len)){
+		res = false;
+		goto exit;
 	}
-	
+
+	skb = atbm_dev_alloc_skb(special_ie_len+2);
+
+	if(skb == NULL){
+		res = false;
+		goto exit;
+	}
+	special = skb->data;
+	special[0] = ATBM_WLAN_EID_PRIVATE;
+	special[1] = special_ie_len;
+
+	memcpy(&special[2],special_ie,special_ie_len);
+	atbm_skb_put(skb,special_ie_len+2);
+	skb->pkt_type = type;
+	special_update = (struct ieee80211_update_special*)skb->cb;
+
+	special_update->req_sdata = sdata;
+	special_update->special_ie = special;
+	special_update->special_len = special_ie_len+2;
+
 	atbm_skb_queue_tail(&sdata->local->special_req_list, skb);
-	atbm_schedule_work(&sdata->local->special_work);
+	schedule_work(&sdata->local->special_work);
 	res = true;
-	
 exit:
 	return res;
 }
@@ -1648,7 +1599,7 @@ bool ieee80211_sta_triger_passive_scan(struct ieee80211_sub_if_data *sdata,
 	}
 
 	atbm_skb_queue_tail(&sdata->local->special_req_list, skb);
-	atbm_schedule_work(&sdata->local->special_work);
+	schedule_work(&sdata->local->special_work);
 	res = true;
 exit:
 	return res;
@@ -1667,8 +1618,7 @@ exit:
 bool ieee80211_sta_triger_positive_scan(struct ieee80211_sub_if_data *sdata,
 													  u8 *channels,size_t n_channels,
 													  u8 *ssid,size_t ssid_len,
-													  u8 *ie,u16 ie_len,
-													  u8 *bssid)
+													  u8 *ie,size_t ie_len)
 {
 	bool res = true;
 	struct sk_buff *skb;
@@ -1727,16 +1677,13 @@ bool ieee80211_sta_triger_positive_scan(struct ieee80211_sub_if_data *sdata,
 		goto exit;
 	}
 	
-	if(ie_len>257){
+	if(ie_len>255){
 		res = false;
 		goto exit;
 	}
 	
 	len = n_channels+ie_len;
 
-	if(bssid)
-		len += 6;
-	
 	if(ssid && ssid_len)
 		len += sizeof(struct cfg80211_ssid);
 	
@@ -1786,15 +1733,10 @@ bool ieee80211_sta_triger_positive_scan(struct ieee80211_sub_if_data *sdata,
 		memcpy(scan_req->ie,ie,ie_len);
 		pos = (void*)(scan_req->ie+ie_len);
 	}
-
-	if(bssid){
-		scan_req->bssid = pos;
-		memcpy(scan_req->bssid,bssid,6);
-	}
 	
 	WARN_ON(pos != pos_end);
 	atbm_skb_queue_tail(&sdata->local->special_req_list, skb);
-	atbm_schedule_work(&sdata->local->special_work);
+	schedule_work(&sdata->local->special_work);
 	res = true;
 exit:	
 	return res;
@@ -1803,106 +1745,20 @@ exit:
 void ieee80211_sta_rx_queued_mgmt_special(struct ieee80211_sub_if_data *sdata,
 				  struct sk_buff *skb)
 {
-	#if 1
-	struct atbm_ieee80211_mgmt *mgmt = (struct atbm_ieee80211_mgmt *)skb->data;
-	u8 *elements;
-	int baselen;
-	struct ieee802_atbm_11_elems elems;
-	struct ieee80211_rx_status *rx_status = IEEE80211_SKB_RXCB(skb);
-	int freq;
-	char ssid[32]={0};
-	u8 *ie = NULL;
 	/*
 	*the follow code is a demo , add other by yourself
 	*/
-	
-	if (skb->len < 24){
-		atbm_printk_err("ieee80211_sta_rx_queued_mgmt_special:skb->len < 24 \n");
+	struct atbm_ieee80211_mgmt *mgmt = (struct atbm_ieee80211_mgmt *)skb->data;
+
+	if (skb->len < 24)
 		return;
-	}
 
 	if (ieee80211_is_probe_resp(mgmt->frame_control)) {
-		//atbm_printk_err("send_one = %s ,count = %d\n",send_one?"true":"false",count);
 		/* ignore ProbeResp to foreign address */
-		baselen = offsetof(struct atbm_ieee80211_mgmt, u.probe_resp.variable);
-		if (baselen > skb->len){
-			atbm_printk_err("[probe resp] error ! \n");
-			return;
-		}
-		elements = mgmt->u.probe_resp.variable;
-		ieee802_11_parse_elems(elements, skb->len - baselen, &elems);
-		if (elems.ds_params && elems.ds_params_len == 1)
-			freq = ieee80211_channel_to_frequency(elems.ds_params[0],
-						      rx_status->band);
-		else
-			freq = rx_status->freq;
-		
-		freq = (freq - 2412)/5 + 1;
-		ie = (u8 *) atbm_ieee80211_find_ie(ATBM_WLAN_EID_PRIVATE,mgmt->u.probe_resp.variable,
-				                   skb->len-offsetof(struct atbm_ieee80211_mgmt, u.probe_resp.variable));		
-		if(ie){
-			u8 special_data[255]={0};
-			ie[2+ie[1]] = 0;
-			atbm_printk_cfg("[probe resp] from [%pM] channel[%d] special ie[%d][%d][%s]\n",mgmt->sa,freq,ie[0],ie[1],ie+2);			
-			if(memcmp(ie+2,"RECV_PROBE_REQ",14) == 0){
-				memcpy(special_data,"RECV_PROBE_RESP",15);
-				ieee80211_send_special_probe_req(sdata, NULL, NULL,0, special_data, 15);
-				/*
-				special_data[0] = ATBM_WLAN_EID_PRIVATE;
-				special_data[1] = 15;
-				memcpy(special_data+2,"RECV_PROBE_RESP",15);
-				ieee80211_sta_triger_positive_scan(sdata,&freq,1,NULL,0,&special_data[0],special_data[1] + 2);
-				*/
-			}
-		}
-		else{
-			atbm_printk_err("[proberesp] from [%pM] channel[%d] \n",mgmt->sa,freq);
-			return ;
-		}
 		if (memcmp(mgmt->da, sdata->vif.addr, ETH_ALEN))
 			return;
 	} else if(ieee80211_is_beacon(mgmt->frame_control)){
-			baselen = offsetof(struct atbm_ieee80211_mgmt, u.beacon.variable);
-		if (baselen > skb->len){
-			atbm_printk_cfg("[beacon] error ! \n");
-			return;
-		}
-		elements = mgmt->u.beacon.variable;
-		ieee802_11_parse_elems(elements, skb->len - baselen, &elems);
-		if (elems.ds_params && elems.ds_params_len == 1)
-			freq = ieee80211_channel_to_frequency(elems.ds_params[0],
-						      rx_status->band);
-		else
-			freq = rx_status->freq;
-
-		freq = (freq - 2412)/5 + 1;
-		memcpy(ssid,elems.ssid,elems.ssid_len);
-		ie = (u8 *)atbm_ieee80211_find_ie(ATBM_WLAN_EID_PRIVATE,mgmt->u.beacon.variable,
-				                   skb->len-offsetof(struct atbm_ieee80211_mgmt, u.beacon.variable));			
-		if(ie){
-			u8 special_data[255]={0};
-			ie[2+ie[1]] = 0;
-			atbm_printk_cfg("==========>>>[beacon] from [%pM] channel[%d] ssid[%s] ie[%d][%d][%s]\n",mgmt->bssid,freq,ssid,ie[0],ie[1],ie+2);
-			
-			memcpy(special_data,"RECV_BEACON",11);
-			//ieee80211_send_special_probe_req(sdata, NULL, NULL,0, special_data, 11);
-			
-			//atbm_printk_err("recv_beacon ####################### \n");
-			/*
-			if(!sned_one){
-			special_data[0] = ATBM_WLAN_EID_PRIVATE;
-			special_data[1] = 11;
-			memcpy(special_data + 2,"RECV_BEACON",11);
-			ieee80211_sta_triger_positive_scan(sdata,&freq,1,NULL,0,&special_data[0],special_data[1] + 2);
-				sned_one=true;
-			}
-			*/
-			
-		}
-		else{
-			atbm_printk_cfg("[beacon] from [%pM] channel[%d] ssid[%s] \n",mgmt->bssid,freq,ssid);
-			return ;
-		}
+		
 	}else {
 		/*
 		*other frame drop
@@ -1910,7 +1766,6 @@ void ieee80211_sta_rx_queued_mgmt_special(struct ieee80211_sub_if_data *sdata,
 		return;
 	}
 
-#endif
 
 }
 #endif
@@ -1952,7 +1807,7 @@ void ieee80211_stop_device(struct ieee80211_local *local)
 {
 	ieee80211_led_radio(local, false);
 	ieee80211_mod_tpt_led_trig(local, 0, IEEE80211_TPT_LEDTRIG_FL_RADIO);
-	atbm_flush_workqueue(local->workqueue);
+	flush_workqueue(local->workqueue);
 	drv_stop(local);
 }
 #if defined (CONFIG_PM)
@@ -2183,7 +2038,7 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 	/* first set suspended false, then resuming */	
 	atbm_printk_pm("%s:resume_timer_start\n",__func__);
 	atomic_set(&local->resume_timer_start,1);
-	atbm_mod_timer(&local->resume_timer, round_jiffies(jiffies + 2*HZ));
+	mod_timer(&local->resume_timer, round_jiffies(jiffies + 2*HZ));
 	local->suspended = false;
 	mb();
 	local->resuming = false;
@@ -2208,7 +2063,7 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 		}
 	}
 
-	atbm_mod_timer(&local->sta_cleanup, jiffies + 1);
+	mod_timer(&local->sta_cleanup, jiffies + 1);
 #ifdef CONFIG_MAC80211_ATBM_MESH
 	mutex_lock(&local->sta_mtx);
 	list_for_each_entry(sta, &local->sta_list, list)
@@ -2632,7 +2487,8 @@ void ieee80211_atbm_put_authen_bss(struct ieee80211_vif *vif,struct cfg80211_bss
 {
 	__ieee80211_atbm_put_authen_bss(vif,bss);
 }
-static char* ieee8211_find_name(struct ieee80211_hw *hw,const char *name)
+#ifdef CONFIG_ATBM_NOT_REALLOC_NAME
+static const char* ieee8211_find_name(struct ieee80211_hw *hw,const char *name)
 {
 	/*
 	*phy0-name;
@@ -2640,140 +2496,104 @@ static char* ieee8211_find_name(struct ieee80211_hw *hw,const char *name)
 	struct ieee80211_local *local = hw_to_local(hw);
 	int phy_namelen = strlen(wiphy_name(local->hw.wiphy))+1;
 	int new_namelen = phy_namelen+strlen(name)+1;
-	struct ieee80211_name_def *def = NULL;
-	struct ieee80211_name_def *def_next = NULL;
-	struct ieee80211_name_def *new_def = NULL;
-	char *find_name = NULL;
+	const char *find_name = NULL;
+	const char *pos_null = NULL;
+	const char *pos_start = 0;
+	int len_left = 0;
+
 	spin_lock_bh(&local->ieee80211_name_lock);
 	
-	
-	if(new_namelen > 128){
+	if(local->ieee80211_name_len < new_namelen)
 		goto exit;
-	}
 
-	list_for_each_entry_safe(def,def_next,&local->ieee80211_name_list,list){
+	len_left = local->ieee80211_name_len;
+	pos_start = local->ieee80211_name_base;
+	pos_null  = local->ieee80211_name_base - 1;
+	
+	while(len_left){
+		
+		len_left -= (pos_null+1-pos_start);
+		pos_start = pos_null+1;
+		
+		atbm_printk_err("%s:len_left(%d)(%d)\n",__func__,len_left,local->ieee80211_name_len);
+		if(len_left <= 0)
+			break;
+		
+		pos_null  = memchr(pos_start, ATBM_TAIL, len_left);
+		
+		if(pos_null == NULL)
+			break;
 
-		if(def->s_name != name)
+		if(pos_null - pos_start + 1 != new_namelen)
 			continue;
 
-		list_del(&def->list);
+		if(memcmp(pos_start+phy_namelen,name,strlen(name)))
+			continue;
 
-		new_def = atbm_krealloc(def,new_namelen+sizeof(struct ieee80211_name_def),GFP_ATOMIC);
-
-		if(new_def == NULL){
-			goto exit;
-		}
-		find_name = new_def->mem;
-		new_def->d_name = find_name;
-		new_def->s_name = name;
-		new_def->name_size = new_namelen;
-
-		memcpy(find_name,wiphy_name(local->hw.wiphy),strlen(wiphy_name(local->hw.wiphy)));
-		find_name[strlen(wiphy_name(local->hw.wiphy))] = '-';
-		memcpy(find_name+strlen(wiphy_name(local->hw.wiphy))+1,name,strlen(name)+1);
+		find_name = pos_start;
+		atbm_printk_err("%s:find name(%s)\n",__func__,find_name);
 		break;
-	}
-	if(find_name){
-		atbm_printk_debug("%s:find_name[%s]\n",__func__,find_name);
-		list_add_tail(&new_def->list, &local->ieee80211_name_list);
 	}
 exit:
 	spin_unlock_bh(&local->ieee80211_name_lock);
 	return find_name;
 }
+#endif
 char *ieee80211_alloc_name(struct ieee80211_hw *hw,const char *name)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
 	const char *phy_name = wiphy_name(local->hw.wiphy);
+	char *new_name = NULL;
 	int alloc_name_len = strlen(name)+strlen(phy_name)+2/*'-' + 0*/;
 	char *alloc_name = NULL;
-	struct ieee80211_name_def *def;
 
+#ifdef CONFIG_ATBM_NOT_REALLOC_NAME
 	alloc_name = ieee8211_find_name(hw,name);
 
 	if(alloc_name)
 		return alloc_name;
-	
+#endif	
 	spin_lock_bh(&local->ieee80211_name_lock);
+	/*
+	*ieee80211_name_len may be is too long
+	*/
+	if(local->ieee80211_name_len<0)
+		goto exit;
 	/*
 	*local->ieee80211_name_len + alloc_name_len may be is too long
 	*/
-	if(alloc_name_len < 0)
+	if(local->ieee80211_name_len + alloc_name_len < 0)
 		goto exit;
-	
-	if(alloc_name_len >= 128){
-		atbm_printk_err("%s:name is too long\n",__func__);
-		goto exit;
-	}
-	
-	def = atbm_kzalloc(alloc_name_len + sizeof(struct ieee80211_name_def),GFP_ATOMIC);
 
-	if(def == NULL){
-		atbm_printk_err("%s def is null\n",__func__);
-		goto exit;
+	if(local->ieee80211_name_len&&local->ieee80211_name_base){
+		new_name = atbm_krealloc(local->ieee80211_name_base,alloc_name_len+local->ieee80211_name_len,GFP_ATOMIC);
+
+		if(new_name == NULL){
+			goto exit;
+		}
+	}else {
+		new_name = atbm_kzalloc(alloc_name_len,GFP_ATOMIC);
+
+		if(new_name == NULL){
+			goto exit;
+		}
 	}
-	
-	alloc_name = def->mem;
-	def->s_name = name;
-	def->d_name = alloc_name;
-	def->name_size = alloc_name_len;
+
+	alloc_name = new_name + local->ieee80211_name_len;
 	/*
 	*phy_name-name
 	*/
 	memcpy(alloc_name,phy_name,strlen(phy_name));
 	alloc_name[strlen(phy_name)] = '-';
 	memcpy(alloc_name+strlen(phy_name)+1,name,strlen(name)+1);
-	atbm_printk_debug("[%s],alloc_name_len[%d]\n",alloc_name,alloc_name_len);
-	list_add_tail(&def->list, &local->ieee80211_name_list);
+
+	local->ieee80211_name_base = new_name;
+	local->ieee80211_name_len += alloc_name_len;
+	atbm_printk_debug("[%s],alloc_name_len[%d],ieee80211_name_len[%d]\n",
+		alloc_name,alloc_name_len,local->ieee80211_name_len);
 exit:
 	spin_unlock_bh(&local->ieee80211_name_lock);
 	return alloc_name;
-}
-/**
- * _ieee80211_is_robust_mgmt_frame - check if frame is a robust management frame
- * @hdr: the frame (buffer must include at least the first octet of payload)
- */
-static inline bool _atbm_ieee80211_is_robust_mgmt_frame(struct ieee80211_hdr *hdr)
-{
-	if (ieee80211_is_disassoc(hdr->frame_control) ||
-	    ieee80211_is_deauth(hdr->frame_control))
-		return true;
-
-	if (ieee80211_is_action(hdr->frame_control)) {
-		u8 category;
-
-		/*
-		 * Action frames, excluding Public Action frames, are Robust
-		 * Management Frames. However, if we are looking at a Protected
-		 * frame, skip the check since the data may be encrypted and
-		 * the frame has already been found to be a Robust Management
-		 * Frame (by the other end).
-		 */
-		if (ieee80211_has_protected(hdr->frame_control))
-			return true;
-		category = *(((u8 *) hdr) + 24) & 0x7f;
-
-		return category != ATBM_WLAN_CATEGORY_PUBLIC &&
-			category != ATBM_WLAN_CATEGORY_HT &&
-			category != ATBM_WLAN_CATEGORY_WNM_UNPROTECTED &&
-			category != ATBM_WLAN_CATEGORY_SELF_PROTECTED &&
-			category != ATBM_WLAN_CATEGORY_UNPROT_DMG &&
-			category != ATBM_WLAN_CATEGORY_VHT &&
-			category != ATBM_WLAN_CATEGORY_VENDOR_SPECIFIC;
-	}
-
-	return false;
-}
-
-/**
- * ieee80211_is_robust_mgmt_frame - check if skb contains a robust mgmt frame
- * @skb: the skb containing the frame, length will be checked
- */
-bool atbm_ieee80211_is_robust_mgmt_frame(struct sk_buff *skb)
-{
-	if (skb->len < IEEE80211_MIN_ACTION_SIZE)
-		return false;
-	return _atbm_ieee80211_is_robust_mgmt_frame((void *)skb->data);
 }
 #ifndef CONFIG_IEEE80211_SPECIAL_FILTER
 struct sk_buff *ieee80211_special_queue_package(struct ieee80211_vif *vif,struct sk_buff *skb)

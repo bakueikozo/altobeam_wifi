@@ -36,314 +36,7 @@
 #define IEEE80211_PROBE_DELAY (HZ / 33)
 #define IEEE80211_CHANNEL_TIME (HZ / 33)
 #define IEEE80211_PASSIVE_CHANNEL_TIME (HZ / 8)
-#define IEEE80211_SCAN_SPIT_TP_500K		500*1024
-#define IEEE80211_SCAN_SPIT_TP_1M		1000*1024
-#define IEEE80211_SCAN_SPIT_TP_5M		5000*1024
-#define IEEE80211_SCAN_SPIT_TP_10M		10000*1024
-#define IEEE80211_SCAN_SPIT_TP_20M		20000*1024
-#define IEEE80211_SCAN_SPIT_TP_30M		30000*1024
-#define IEEE80211_SCAN_SPIT_TP_40M		40000*1024
 
-static  int ieee80211_scan_send_probe_req(struct ieee80211_local *local,
-			      struct ieee80211_sub_if_data *sdata,
-			      struct ieee80211_scan_req_wrap *req)
-{
-	struct sk_buff *skb = NULL;
-
-	/*
-	*receive other bss
-	*/
-	atbm_printk_debug("%s\n",__func__);
-	
-	if(sdata->vif.type != NL80211_IFTYPE_STATION){
-		return -1;
-	}
-
-	if(!(req->flags & IEEE80211_SCAN_REQ_NEED_LISTEN)){
-		sdata->req_filt_flags |= FIF_OTHER_BSS;
-		sdata->flags |= IEEE80211_SDATA_ALLMULTI;
-		ieee80211_configure_filter(sdata);
-		atbm_printk_debug("%s:filter\n",__func__);
-	} else {
-#ifndef CONFIG_ATBM_STA_LISTEN
-		return -1;
-#else
-		atbm_printk_debug("%s:listen\n",__func__);
-		if(local->ops->sta_triger_listen)
-			local->ops->sta_triger_listen(&local->hw,&sdata->vif,req->req->channels[0]);
-		else 
-			return -1;
-#endif
-	}
-	skb = ieee80211_probereq_get(&local->hw, &sdata->vif, NULL, 0,
-								req->req->ie, req->req->ie_len,
-								req->flags & IEEE80211_SCAN_REQ_NEED_BSSID ? req->bssid:NULL);
-
-	if(skb){
-		struct ieee80211_tx_info *info;
-
-		info = IEEE80211_SKB_CB(skb);
-
-		info->flags |= IEEE80211_TX_INTFL_DONT_ENCRYPT;
-		info->flags |= IEEE80211_TX_CTL_NO_ACK;
-		info->band = req->req->channels[0]->band;
-		info->control.vif = &sdata->vif;
-		info->flags |= IEEE80211_TX_CTL_CLEAR_PS_FILT |
-				IEEE80211_TX_CTL_ASSIGN_SEQ |
-				IEEE80211_TX_CTL_FIRST_FRAGMENT |
-				IEEE80211_TX_CTL_RATE_CTRL_PROBE;
-		if(sdata->vif.p2p == true)
-			info->flags |= IEEE80211_TX_CTL_NO_CCK_RATE;
-		ieee80211_tx_skb(sdata, skb);
-	}
-
-	local->scan_idle_time = 300*req->req->n_channels > 10000 ? 10000 : 100*req->req->n_channels;
-	
-	ieee80211_scan_completed(&local->hw,0);
-
-	return 0;
-}
-#ifndef  CONFIG_ATBM_5G_PRETEND_2G
-struct country_chan{
-	  	char *country;
-	  	u8 chan;
- };
- struct country_chan country_t[4]={
-	  {"CN",13},
-	  {"JP",14},
-	  {"US",11},
-	  {NULL,0}
-};
-#endif
-/*
-	return 
-		0  : no limit
-		>0 : limit
-		<0 : limit,not allow scan
-*/
-static int ieee80211_check_country_limit_scan_2_4G_chan(struct ieee80211_local *local,struct cfg80211_scan_request *req)
-{
-#ifdef  CONFIG_ATBM_5G_PRETEND_2G
-	return 0;
-#else
-  	int country_chan = 0,freq,scan_chan,scan_n_chans;
- 
-  	int i = 0,j = 0,k = 0;
-	void *pptr[32];
-	/*
-		?D??¨º?????1¨²?¨°
-	*/
-  	do{
-	  	if(memcmp(local->country_code,country_t[i].country,2) == 0){
-		  	country_chan = country_t[i].chan;
-			break;
-	  	}
-	  	i++;
-  	}while(country_t[i].country);
-
-	if((country_chan > 0) && (req != NULL)){
-		atbm_printk_err("%s : scan_n_channals = %d ++++++++ \n",__func__,req->n_channels);
-	/*
-		1?¡éD¨¨¨°a¨¨¡¤?¡§¨¦¡§?¨¨¦Ì?D?¦Ì¨¤??¨ºy
-		2?¡éD¨¨¨°a¨¨¡¤¨¨?¨¦¡§?¨¨¦Ì?D?¦Ì¨¤¨º?¡¤??¨²?T??¡¤??¡ì?¨²¡ê?3?3?¡¤??¡ì?¨ª2?¨¦¡§?¨¨
-		3?¡é5G D?¦Ì¨¤???¡ä?¨®¡ê??¨¨2???
-		?¨´?Yn_channals ??¨¨?¦Ì?¨º¦Ì?¨ºchannal freq
-		freq = channel_center_freq(req->channels[i])
-		ieee80211_frequency_to_channel(freq) == 0 vail channel
-	*/
-		scan_n_chans = req->n_channels;
-		for(j = 0; j < req->n_channels ; j++){
-			if(req->channels[j] == NULL){
-				atbm_printk_err("%s : channals is NULL ! not allow scan\n",__func__);
-				return -1;
-			}
-			freq = channel_center_freq(req->channels[j]);
-			scan_chan = ieee80211_frequency_to_channel(freq);//1~
-			/*
-				?D??¨º?¡¤?3?3?¨¢??T??¦Ì?D?¦Ì¨¤
-			*/
-			if((scan_chan != 0) && (scan_chan <= country_chan)){
-				pptr[k++] = req->channels[j];// ?¨ºD¨ª¨¦¡§?¨¨¦Ì?D?¦Ì¨¤
-				continue;
-			}else{
-				scan_n_chans--;
-			}
-		}
-		/*
-			¨¦?3y3?3?1¨²?¨°?T??¨¦¡§?¨¨¦Ì?D?¦Ì¨¤
-		*/
-		if(scan_n_chans <= 0){
-			atbm_printk_err("%s : not allow scan ! \n",__func__);
-			return -1;
-		}
-		if(scan_n_chans < req->n_channels){
-			/*
-				??3y¦Ì??¨´¨®D¦Ì?channals
-				¨®DD?¨º?2?D¨¨¨°a¦Ì?
-			*/
-			for(j = 0; j < req->n_channels ; j++){
-				req->channels[j] = NULL;
-			}
-			/*
-				???¨²?T??¡¤??¡ì?¨²¨¦¡§?¨¨¦Ì?D?¦Ì¨¤??D??3?¦Ì
-			*/
-			for(j = 0; j < scan_n_chans ; j++){
-				req->channels[j] = pptr[j];
-			}
-			req->n_channels = scan_n_chans;	
-		}
-		atbm_printk_err("%s : scan_n_channals = %d --------- \n",__func__,req->n_channels);
-	}
-
-  	return country_chan;  
-#endif
-}
-		
-static int ieee80211_2_4G_scan_results_limit(struct ieee80211_local *local,
-														struct sk_buff *skb,
-														struct ieee80211_channel *channel)
-{
-#ifdef  CONFIG_ATBM_5G_PRETEND_2G
-	return 0;
-#else
-	int freq,curr_chan,i=0,country_chan = 0,fc;
-	struct atbm_ieee80211_mgmt *mgmt;
-	bool presp, beacon = false;
-	size_t baselen;
-	u8 *elements;
-	struct ieee802_atbm_11_elems elems;
-	struct ieee80211_rx_status *rx_status = NULL;//IEEE80211_SKB_RXCB(skb);
-
-	  
-	  do{
-	  	if(memcmp(local->country_code,country_t[i].country,2) == 0){
-		  	country_chan = country_t[i].chan;
-			break;
-	  	}
-	  	i++;
-  	}while(country_t[i].country);
-	
-	if((country_chan > 0) && (skb != NULL)){
-		rx_status = IEEE80211_SKB_RXCB(skb);
-		mgmt = (struct atbm_ieee80211_mgmt *) skb->data;
-		fc = mgmt->frame_control;
-		presp = ieee80211_is_probe_resp(fc);
-		if (presp) {
-			/* ignore ProbeResp to foreign address */
-			
-			elements = mgmt->u.probe_resp.variable;
-			baselen = offsetof(struct atbm_ieee80211_mgmt, u.probe_resp.variable);
-		} else {
-			beacon = ieee80211_is_beacon(fc);
-			baselen = offsetof(struct atbm_ieee80211_mgmt, u.beacon.variable);
-			elements = mgmt->u.beacon.variable;
-		}
-		if (!presp && !beacon){
-			return 0;
-		}
-		ieee802_11_parse_elems(elements, skb->len - baselen, &elems);
-		if (elems.ds_params && elems.ds_params_len == 1)
-			freq = ieee80211_channel_to_frequency(elems.ds_params[0],
-							      rx_status->band);
-		else
-			freq = rx_status->freq;
-		curr_chan = ieee80211_frequency_to_channel(freq);
-		//atbm_printk_err("skb : country_chan = %d curr_chan = %d\n",country_chan,curr_chan);
-		if(curr_chan > country_chan){
-			atbm_printk_err("%s : current scan results channals = %d,limit channel=%d ++++++++ \n",
-					__func__,curr_chan,country_chan);
-			return -1;
-		}
-	
-	}else if((country_chan > 0) && (channel != NULL)){
-		
-		freq = channel_center_freq(channel);
-		curr_chan = ieee80211_frequency_to_channel(freq);
-		//atbm_printk_err("channel : country_chan = %d curr_chan = %d\n",country_chan,curr_chan);
-		if(curr_chan > country_chan){
-			atbm_printk_err("%s : current scan results channals = %d,limit channel=%d ++++++++ \n",
-					__func__,curr_chan,country_chan);
-			return -1;
-		}
-
-	}else{
-		atbm_printk_debug("ieee80211_2_4G_scan_results_limit:%d :country_chan = %d \n",__LINE__,country_chan);
-	}
-	return 0;
-#endif
-}
-		  
-static  int ieee80211_drv_hw_scan(struct ieee80211_local *local,
-			      struct ieee80211_sub_if_data *sdata,
-			      struct ieee80211_scan_req_wrap *req)
-{
-	int ret = 0;
-	
-	if(req->flags & IEEE80211_SCAN_REQ_ONLY_PROB){
-		ret = ieee80211_scan_send_probe_req(local,sdata,req);
-	}else{
-		ret = drv_hw_scan(local,sdata,req);
-	}
-
-	return ret;
-}
-static void ieee80211_scan_try_split(struct ieee80211_local *local)
-{
-	struct cfg80211_scan_request *req = local->scan_req;
-	struct ieee80211_sub_if_data *sdata;
-	unsigned long total_rx_tp = 0;
-	unsigned long total_tx_tp = 0;
-	unsigned long total_tp = 0;
-	bool	should_split = false;
-	
-	rcu_read_lock();
-	list_for_each_entry_rcu(sdata, &local->interfaces, list)
-		if(ieee80211_sdata_running(sdata)){
-			total_rx_tp += sdata->traffic.current_rx_tp;
-			total_tx_tp += sdata->traffic.current_tx_tp;
-			if ((sdata->vif.type == NL80211_IFTYPE_AP)||(sdata->vif.type == NL80211_IFTYPE_P2P_GO)){
-				should_split = true;
-			}
-		}
-	rcu_read_unlock();
-
-	total_tp = max(total_rx_tp,total_tx_tp);
-	WARN_ON(local->scan_n_channels > req->n_channels);
-	atbm_printk_debug("%s:tp(%ld)(%d)\n",__func__,total_tp,req->n_channels);
-	if(total_tp <= IEEE80211_SCAN_SPIT_TP_500K){
-		local->scan_idle_time = 0;
-		local->scan_channel_space = req->n_channels-local->scan_n_channels;
-	}else if(total_tp <= IEEE80211_SCAN_SPIT_TP_1M){
-		local->scan_idle_time = 100;
-		local->scan_channel_space = 10;
-	}else if(total_tp <= IEEE80211_SCAN_SPIT_TP_5M){
-		local->scan_idle_time = 100;
-		local->scan_channel_space = 6;
-	}else if(total_tp <= IEEE80211_SCAN_SPIT_TP_10M){
-		local->scan_idle_time = 200;
-		local->scan_channel_space = 2;
-	}else if(total_tp <= IEEE80211_SCAN_SPIT_TP_20M){
-		local->scan_idle_time = 350;
-		local->scan_channel_space = 2;
-	}else if(total_tp <= IEEE80211_SCAN_SPIT_TP_30M){
-		local->scan_idle_time = 400;
-		local->scan_channel_space = 1;
-	}else {
-		local->scan_idle_time = 450;
-		local->scan_channel_space = 1;
-	}
-
-	if(local->scan_channel_space >= req->n_channels-local->scan_n_channels){
-		local->scan_idle_time = 0;
-		local->scan_channel_space = req->n_channels-local->scan_n_channels;
-	}
-
-	if((should_split == true) && (local->scan_channel_space > 1)){
-		local->scan_channel_space = 1;
-		local->scan_idle_time     = 80;
-	}
-	atbm_printk_debug("%s:space(%d),idle(%ld)\n",__func__,local->scan_channel_space,local->scan_idle_time);
-}
 struct ieee80211_bss *
 ieee80211_rx_bss_get(struct ieee80211_local *local, u8 *bssid, int freq,
 		     u8 *ssid, u8 ssid_len)
@@ -434,10 +127,6 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 	}
 	#undef ATBM_BOOT_TIME
 	#endif
-	
-	if(ieee80211_2_4G_scan_results_limit(local,NULL,channel) < 0)
-		return NULL;
-
 	cbss = cfg80211_inform_bss_frame(local->hw.wiphy, channel,
 					 (struct ieee80211_mgmt*)mgmt, len, signal, GFP_ATOMIC);
 
@@ -602,7 +291,7 @@ static void ieee80211_scan_rx_internal_update(struct ieee80211_local *local,
 	struct atbm_internal_scan_sta_node *sta_node;
 	struct atbm_internal_scan_sta_node *sta_node_target = NULL;
 	
-	atbm_printk_debug("%s:ssid[%s],mac[%pM],channel[%d],signal[%d],beacon[%d]\n",__func__,result->sta.ssid,result->sta.bssid,result->sta.channel,result->sta.signal,result->sta.beacon);
+	atbm_printk_debug("%s:ssid[%s],mac[%pM],channel[%d],signal[%d]\n",__func__,result->sta.ssid,result->sta.bssid,result->sta.channel,result->sta.signal);
 	spin_lock_bh(&local->internal_scan_list_lock);
 	/*
 	*find target sta from hash list
@@ -638,33 +327,14 @@ static void ieee80211_scan_rx_internal_update(struct ieee80211_local *local,
 		local->internal_scan_n_results++;
 		hlist_add_head(&sta_node_target->hnode,hlist);
 	}else {
-		
-		if((result->sta.ie_len != sta_node_target->sta.ie_len)){
-			if((result->sta.ie_len == 0)){
-
-				/*
-						recv null special ie,not fresh
-				*/
-
-				atbm_printk_debug("%s:ie(%s)\n",__func__,sta_node_target->sta.ie);
-				spin_unlock_bh(&local->internal_scan_list_lock);
-				return;	
-			}
-		}	
-		
-		/*
-		* only save the new special ie so need free old special ie
-		*/
-		
 		if(sta_node_target->sta.ie){
+			/*
+			*only save the new special ie,here free the old one.
+			*/
 			atbm_kfree(sta_node_target->sta.ie);
 			sta_node_target->sta.ie = NULL;
 			sta_node_target->sta.ie_len = 0;
 		}
-
-	
-			
-		
 	}
 	/*
 	*update sta infor
@@ -742,163 +412,6 @@ u8* ieee80211_scan_cca_val_get(struct ieee80211_hw *hw)
 
 	return req_wrap->cca_val;
 }
-/*
-#define ATBM_RSN_CIPHER_SUITE_NONE 					0x000fac00
-#define ATBM_RSN_CIPHER_SUITE_WEP40					0x000fac01
-#define ATBM_RSN_CIPHER_SUITE_TKIP 					0x000fac02
-#define ATBM_RSN_CIPHER_SUITE_CCMP 					0x000fac04
-#define ATBM_RSN_CIPHER_SUITE_WEP104 				0x000fac05
-#define ATBM_RSN_CIPHER_SUITE_AES_128_CMAC 			0x000fac06
-#define ATBM_RSN_CIPHER_SUITE_NO_GROUP_ADDRESSED 	0x000fac07
-#define ATBM_RSN_CIPHER_SUITE_GCMP 					0x000fac08
-
-struct atbm_wpa_ie_data {
-	int proto;
-	int pairwise_cipher; 
-	int group_cipher;
-	int key_mgmt;
-	int wpa_capabilities;
-	int rsn_capabilities;
-	size_t num_pmkid;
-	const u8 *pmkid;
-	int mgmt_group_cipher;
-};
-
-
-*/
-
-static int get_selector_to_bitfield(const u8 *s)
-{
-	
-	if (ATBM_WPA_GET_BE32(s) == ATBM_RSN_CIPHER_SUITE_NONE)
-		return ATBM_WPA_CIPHER_NONE;
-	if (ATBM_WPA_GET_BE32(s) == ATBM_RSN_CIPHER_SUITE_WEP40)
-		return ATBM_WPA_CIPHER_WEP40;
-	if (ATBM_WPA_GET_BE32(s) == ATBM_RSN_CIPHER_SUITE_TKIP)
-		return ATBM_WPA_CIPHER_TKIP;
-	if (ATBM_WPA_GET_BE32(s) == ATBM_RSN_CIPHER_SUITE_CCMP)
-		return ATBM_WPA_CIPHER_CCMP;
-	if (ATBM_WPA_GET_BE32(s) == ATBM_RSN_CIPHER_SUITE_WEP104)
-		return ATBM_WPA_CIPHER_WEP104;
-	if (ATBM_WPA_GET_BE32(s) == ATBM_RSN_CIPHER_SUITE_AES_128_CMAC)
-		return ATBM_WPA_CIPHER_AES_128_CMAC;
-	if (ATBM_WPA_GET_BE32(s) == ATBM_RSN_CIPHER_SUITE_GCMP)
-		return ATBM_WPA_CIPHER_GCMP;
-	return 0;
-}
-
-
-
-
-int get_ap_encryption_algorithm(char *ie,int ie_len, u8 *encry_info,enum ieee80211_enc_type enc_type)
-{
-	char *pos = NULL;
-	int encry_type_count = 0,alg_i = 0;
-	int left = 0;
-	int encry_flag = 0;
-	
-
-
-	switch(enc_type){
-		case IEEE80211_ENC_OPEN:{
-			encry_flag |= 1;
-			}break;
-		case IEEE80211_ENC_WPA:{
-			/*get WPA encryption algorithm */
-				//pos = ie;
-				
-				if(ie == NULL || ie_len <= 0){
-					atbm_printk_scan("get_ap_encryption_algorithm : parameters err! %s,ie_len(%d) \n",ie == NULL?"ie is null":"",ie_len);
-					return -1;
-				}
-				/* jump Version */
-				pos = ie + 6;
-				left = ie_len - 6;
-				if(left >= 4){
-					/*jump Multicast cipher OUI*/
-					pos += 4;
-					left -= 4;
-				}else{
-					atbm_printk_err("get_ap_encryption_algorithm : ie too short \n");
-					break;
-				}
-				if(left >= 2){
-				/* Number of Unicasts: */
-					encry_type_count = ATBM_WPA_GET_LE16(pos);
-					pos += 2;
-					left -= 2;
-					if ((encry_type_count == 0) || (left < encry_type_count * 4)) {
-						atbm_printk_err("%s: ie count botch (pairwise), "
-							   "count %u left %u", __func__, encry_type_count, left);
-						break;
-					}
-					
-					for(alg_i = 0;alg_i < encry_type_count ; alg_i++){
-						if(left < 0){
-							atbm_printk_err("%s ,out of range IEEE80211_ENC_WPA\n",__func__);
-							break;
-						}
-						encry_flag |= get_selector_to_bitfield(pos);
-						pos += 4;
-						left -= 4;
-					}
-				}else{
-					atbm_printk_err("get_ap_encryption_algorithm : ie too short \n");
-				}
-			}break;
-		case IEEE80211_ENC_WPA2:{
-			/*get WPA2 encryption algorithm */
-			
-			if(ie == NULL || ie_len <= 0){
-				atbm_printk_scan("get_ap_encryption_algorithm IEEE80211_ENC_WPA2: parameters err! %s,ie_len(%d) \n",ie == NULL?"ie is null":"",ie_len);
-				return -1;
-			}
-				/* jump Version */
-				pos = ie + 2;
-				left = ie_len - 2;
-				if(left >= 4){
-				/*jump	Group Cipher OUI / Group Cipher Type*/
-					pos +=  4;
-					left -=  4;
-				}else{
-					atbm_printk_err("get_ap_encryption_algorithm IEEE80211_ENC_WPA2 : ie too short \n");
-					break;
-				}
-				if(left >= 2){
-					/*Pairwise Cipher Count*/
-					encry_type_count = ATBM_WPA_GET_LE16(pos);
-					pos += 2;
-					left -= 2;
-					
-					if ((encry_type_count == 0) || (left < encry_type_count * 4)) {
-							atbm_printk_err("%s: IEEE80211_ENC_WPA2 ie count botch (pairwise), "
-								   "count %u left %u", __func__, encry_type_count, left);
-							break;
-					}
-					for(alg_i = 0;alg_i < encry_type_count ; alg_i++ ){
-						if(left < 0){
-							atbm_printk_err("%s IEEE80211_ENC_WPA2,out of range IEEE80211_ENC_WPA2\n",__func__);
-							return -1;
-						}
-						encry_flag |= get_selector_to_bitfield(pos);
-						pos += 4;
-						left -= 4;
-					}
-				}
-			}break;
-		case IEEE80211_ENC_WEP:{
-				encry_flag |= (1<<1);
-				encry_flag |= (1<<2);
-			}break;
-		default:
-			break;
-	}
-
-
-	*encry_info |= (encry_flag & 0xff);
-	return 0;
-}
-
 static ieee80211_rx_result 
 ieee80211_scan_rx_internal_sta_info(struct ieee80211_sub_if_data *sdata, struct sk_buff *skb)
 {
@@ -992,43 +505,25 @@ ieee80211_scan_rx_internal_sta_info(struct ieee80211_sub_if_data *sdata, struct 
 						      rx_status->band);
 	else
 		freq = rx_status->freq;
-	scan_info.sta.beacon = beacon;
+
 	if(elems.rsn && elems.rsn_len && elems.wpa && elems.wpa_len){
 		scan_info.sta.enc_type = IEEE80211_ENC_WPA_WPA2;
-		/*get WPA2 encryption algorithm */
-		get_ap_encryption_algorithm(elems.rsn,elems.rsn_len,&elems.encry_info,IEEE80211_ENC_WPA2);
-		/*get WPA encryption algorithm */
-		get_ap_encryption_algorithm(elems.wpa,elems.wpa_len,&elems.encry_info,IEEE80211_ENC_WPA);
-		
-	}else if(elems.rsn && elems.rsn_len){
+	}else if(elems.rsn && elems.rsn_len)
 		scan_info.sta.enc_type = IEEE80211_ENC_WPA2;
-		get_ap_encryption_algorithm(elems.rsn,elems.rsn_len,&elems.encry_info,IEEE80211_ENC_WPA2);
-	}else if(elems.wpa && elems.wpa_len){
+	else if(elems.wpa && elems.wpa_len)
 		scan_info.sta.enc_type = IEEE80211_ENC_WPA;
-		get_ap_encryption_algorithm(elems.wpa,elems.wpa_len,&elems.encry_info,IEEE80211_ENC_WPA);
-	}else if(((presp == true) && (mgmt->u.probe_resp.capab_info & ATBM_WLAN_CAPABILITY_PRIVACY)) ||
+	else if(((presp == true) && (mgmt->u.probe_resp.capab_info & ATBM_WLAN_CAPABILITY_PRIVACY)) ||
 		    ((beacon == true)&& (mgmt->u.beacon.capab_info & ATBM_WLAN_CAPABILITY_PRIVACY))){
 		scan_info.sta.enc_type = IEEE80211_ENC_WEP;
-		get_ap_encryption_algorithm(elems.wpa,elems.wpa_len,&elems.encry_info,IEEE80211_ENC_WEP);
 	}else {
 		scan_info.sta.enc_type = IEEE80211_ENC_OPEN;
-		get_ap_encryption_algorithm(elems.wpa,elems.wpa_len,&elems.encry_info,IEEE80211_ENC_OPEN);
 	}
-	
-	scan_info.sta.ieee80211_enc_type_name = elems.encry_info;
-	
 	memcpy(scan_info.sta.bssid,mgmt->bssid,ETH_ALEN);
 	scan_info.sta.ssid_len = elems.ssid_len;
 	if(elems.ssid_len>0)
 		memcpy(scan_info.sta.ssid,elems.ssid,elems.ssid_len);
-
-	if(ieee80211_get_channel(sdata->local->hw.wiphy,freq))
-		scan_info.sta.channel = channel_hw_value(ieee80211_get_channel(sdata->local->hw.wiphy,freq));
-	else{
-		atbm_printk_err("%s %d  freq = %d channel_ptr = NULL\n",__func__,__LINE__,freq);
-		handle = RX_DROP_MONITOR;
-		goto err;
-	}
+	
+	scan_info.sta.channel = channel_hw_value(ieee80211_get_channel(sdata->local->hw.wiphy,freq));
 	scan_info.sta.signal = rx_status->signal;
 
 	if(elems.atbm_special_len && elems.atbm_special){
@@ -1140,11 +635,6 @@ ieee80211_rx_result
 ieee80211_scan_rx_internal(struct ieee80211_sub_if_data *sdata, struct sk_buff *skb)
 {
 	ieee80211_rx_result handle = RX_QUEUED;
-
-	
-	if(ieee80211_2_4G_scan_results_limit(sdata->local,skb,NULL) < 0)
-		return handle;
-	
 	if(sdata->local->scan_req_wrap.flags & IEEE80211_SCAN_REQ_RESULTS_SKB){	
 		atbm_printk_debug("%s receive skb\n",__func__);
 		handle = ieee80211_scan_rx_internal_skb(sdata,skb);
@@ -1179,9 +669,6 @@ ieee80211_scan_rx(struct ieee80211_sub_if_data *sdata, struct sk_buff *skb)
 	if (skb->len < 24)
 		return RX_CONTINUE;
 
-	if(sdata->local->scan_sdata != sdata){
-		return RX_CONTINUE;
-	}
 	presp = ieee80211_is_probe_resp(fc);
 	if (presp) {
 		/* ignore ProbeResp to foreign address */
@@ -1224,49 +711,7 @@ ieee80211_scan_rx(struct ieee80211_sub_if_data *sdata, struct sk_buff *skb)
 	atbm_dev_kfree_skb(skb);
 	return RX_QUEUED;
 }
-static u16  ieee80211_scan_oper_channel(struct ieee80211_local *local)
-{
-	u16  oper_channel = 0;
-	struct ieee80211_channel_state *chan_state = ieee80211_get_channel_state(local, local->scan_sdata);
 
-	switch (ieee80211_get_channel_mode(local, NULL)) {
-	case CHAN_MODE_HOPPING:
-	case CHAN_MODE_FIXED:
-		oper_channel = channel_hw_value(chan_state->conf.channel);
-		atbm_printk_debug("%s:current op channel[%d]\n",__func__,oper_channel);
-		break;
-	case CHAN_MODE_UNDEFINED:
-		oper_channel = 0;
-		break;
-	}
-	/*
-	*p2p do not use that function
-	*/
-	if(local->scan_sdata->vif.p2p == true){
-		oper_channel = 0;
-	}
-	/*
-	*cca do not use that function
-	*/
-	if(local->scan_req_wrap.flags & IEEE80211_SCAN_REQ_CCA){
-		oper_channel = 0;
-	}
-	/*
-	*nl80211 scan do not use that function
-	*/
-	if(test_bit(SCAN_CFG80211_SCANNING, &local->scanning)){
-		oper_channel = 0;
-	}
-
-	if(oper_channel&&local->scan_sdata && !local->scan_sdata->u.mgd.associated){
-#ifndef CONFIG_ATBM_STA_LISTEN
-		oper_channel = 0;	
-#else
-		local->scan_req_wrap.flags |= IEEE80211_SCAN_REQ_NEED_LISTEN;
-#endif
-	}
-	return oper_channel;
-}
 /* return false if no more work */
 static bool ieee80211_prep_hw_scan(struct ieee80211_local *local)
 {
@@ -1276,7 +721,6 @@ static bool ieee80211_prep_hw_scan(struct ieee80211_local *local)
 	struct ieee80211_internal_ap_conf *conf = NULL;
 	bool use_req = true;
 	bool abort = false;
-	u16  oper_channel = 0;
 	
 	rcu_read_lock();
 	conf = rcu_dereference(local->scan_sdata->internal_ap_conf);
@@ -1312,50 +756,20 @@ static bool ieee80211_prep_hw_scan(struct ieee80211_local *local)
 		if (use_req == false)
 			break;
 		
-		ieee80211_scan_try_split(local);		
-		oper_channel = ieee80211_scan_oper_channel(local);
 		band = local->hw_scan_band;
 		n_chans = 0;
-		i = local->scan_channel_idx;
-		
-		for (; i < req->n_channels; i++) {
-			/*
-			*check band;
-			*/
-			if(req->channels[i]->band != band){
-				continue;
-			}
-
-			if(n_chans && (oper_channel == channel_hw_value(req->channels[i]))){
-				goto start_scan;
-			}
-			
-			local->hw_scan_req->channels[n_chans] = req->channels[i];
-			n_chans++;
-			local->scan_n_channels ++;
-			local->scan_channel_idx = i+1;
-
-			if(oper_channel == channel_hw_value(req->channels[i])){
-				atbm_printk_debug("%s:only send probe\n",__func__);
-				local->scan_req_wrap.flags |= IEEE80211_SCAN_REQ_ONLY_PROB;
-				BUG_ON(n_chans != 1);
-				goto start_scan;
-			}
-			
-			if(n_chans >= local->scan_channel_space){
-				goto start_scan;
+		for (i = 0; i < req->n_channels; i++) {
+			if (req->channels[i]->band == band) {
+				local->hw_scan_req->channels[n_chans] =
+							req->channels[i];
+				n_chans++;
 			}
 		}
-		
+
 		local->hw_scan_band++;
-		local->scan_channel_idx = 0;
 	} while (!n_chans);
-	
-start_scan:
-	
+
 	local->hw_scan_req->n_channels = n_chans;
-	atbm_printk_debug("%s:n_chans(%d),space(%d),index(%d),scaned(%d)\n",__func__,n_chans,
-		local->scan_channel_space,local->scan_channel_idx,local->scan_n_channels);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
 	ielen = ieee80211_build_preq_ies(local, (u8 *)local->hw_scan_req->ie,
 					 req->ie, req->ie_len, band,
@@ -1476,26 +890,10 @@ static void __ieee80211_scan_completed(struct ieee80211_hw *hw, bool aborted,
 
 	if (WARN_ON(!local->scan_req))
 		return;
-	/*
-	*disable filter
-	*/
-	if(local->scan_req_wrap.flags & IEEE80211_SCAN_REQ_ONLY_PROB){
-		local->scan_sdata->req_filt_flags &= ~(FIF_OTHER_BSS);
-		local->scan_sdata->flags &= ~(IEEE80211_SDATA_ALLMULTI);
-		local->scan_req_wrap.flags &= ~IEEE80211_SCAN_REQ_ONLY_PROB;
-		if(!(local->scan_req_wrap.flags & IEEE80211_SCAN_REQ_NEED_LISTEN))
-			ieee80211_configure_filter(local->scan_sdata);
-		else {
-#ifdef CONFIG_ATBM_STA_LISTEN
-			local->scan_req_wrap.flags &= ~IEEE80211_SCAN_REQ_NEED_LISTEN;
-			local->ops->sta_stop_listen(&local->hw,&local->scan_sdata->vif);
-			atbm_printk_debug("%s:exit listen\n",__func__);
-#endif
-		}
-	}
 	if (was_hw_scan && !aborted && ieee80211_prep_hw_scan(local)) {
-		int rc = ieee80211_drv_hw_scan(local, local->scan_sdata, &local->scan_req_wrap);
-		if (rc == 0){
+		int rc = drv_hw_scan(local, local->scan_sdata, &local->scan_req_wrap);
+		if (rc == 0)
+		{
 			atbm_printk_scan( "%s:%d\n",__func__,__LINE__);
 			return;
 		}
@@ -1516,10 +914,7 @@ static void __ieee80211_scan_completed(struct ieee80211_hw *hw, bool aborted,
 
 	local->scanning = 0;
 	local->scan_channel = NULL;
-	local->scan_channel_space = 0;
-	local->scan_channel_idx = 0;
-	local->scan_channel_space = 0;
-	local->scan_n_channels = 0;
+
 	ieee80211_hw_config(local, IEEE80211_CONF_CHANGE_CHANNEL);
 
 	ieee80211_recalc_idle(local);
@@ -1546,7 +941,7 @@ void ieee80211_scan_completed(struct ieee80211_hw *hw, bool aborted)
 	set_bit(SCAN_COMPLETED, &local->scanning);
 	if (aborted)
 		set_bit(SCAN_ABORTED, &local->scanning);
-	ieee80211_queue_delayed_work(&local->hw, &local->scan_work, msecs_to_jiffies(local->scan_idle_time));
+	ieee80211_queue_delayed_work(&local->hw, &local->scan_work, 0);
 }
 //EXPORT_SYMBOL(ieee80211_scan_completed);
 
@@ -1562,11 +957,6 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 		atbm_printk_scan("%s:%d\n",__func__,__LINE__);
 		return -EBUSY;
 	}
-	if(ieee80211_check_country_limit_scan_2_4G_chan(local,req) < 0){
-		atbm_printk_scan("%s:%d\n",__func__,__LINE__);
-		return -EBUSY;
-	}
-
 #ifdef CONFIG_ATBM_SUPPORT_P2P
 	if (!list_empty(&local->roc_list)){
 		/*
@@ -1628,11 +1018,7 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 
 	local->scan_req = req;
 	local->scan_sdata = sdata;
-	local->scan_n_channels = 0;
-	local->scan_channel_idx = 0;
-	local->scan_channel_space = req->n_channels;
-	local->scan_idle_time = 0;
-	
+
 	if (local->ops->hw_scan)
 		__set_bit(SCAN_HW_SCANNING, &local->scanning);
 	else
@@ -1643,9 +1029,7 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 	__set_bit(SCAN_CFG80211_SCANNING, &local->scanning);
 	
 	ieee80211_recalc_idle(local);
-	
-	local->scan_req_wrap.flags = 0;
-	
+
 	if (local->ops->hw_scan) {
 		WARN_ON(!ieee80211_prep_hw_scan(local));
 		if(sdata->last_scan_ie_len < local->hw_scan_req->ie_len){
@@ -1660,8 +1044,9 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 			memcpy(sdata->last_scan_ie,local->hw_scan_req->ie,local->hw_scan_req->ie_len);
 			sdata->last_scan_ie_len = local->hw_scan_req->ie_len;
 		}
+		local->scan_req_wrap.flags = 0;
 		local->scan_req_wrap.req = local->hw_scan_req;
-		rc = ieee80211_drv_hw_scan(local, sdata, &local->scan_req_wrap);
+		rc = drv_hw_scan(local, sdata, &local->scan_req_wrap);
 	} else
 		BUG_ON(1);
 	
@@ -1678,7 +1063,7 @@ static int __ieee80211_start_scan(struct ieee80211_sub_if_data *sdata,
 
 	return rc;
 }
-void ieee80211_scan_work(struct atbm_work_struct *work)
+void ieee80211_scan_work(struct work_struct *work)
 {
 	struct ieee80211_local *local =
 		container_of(work, struct ieee80211_local, scan_work.work);
@@ -1751,12 +1136,6 @@ bool ieee80211_internal_scan_triger(struct ieee80211_sub_if_data *sdata,struct c
 	int rc;
 	u8 *ies;
 	int i = 0;
-	//int ret = 0;
-	
-	if(ieee80211_check_country_limit_scan_2_4G_chan(local,req) < 0){
-		atbm_printk_err("%s  %d\n",__func__,__LINE__);
-		return false;
-	}
 	
 	lockdep_assert_held(&local->mtx);
 
@@ -1764,7 +1143,6 @@ bool ieee80211_internal_scan_triger(struct ieee80211_sub_if_data *sdata,struct c
 		
 		atbm_printk_err("%s:hw.conf.flags(%x)\n",__func__,local->hw.conf.flags);
 		if(!!(local->hw.conf.flags & IEEE80211_CONF_IDLE) == 0){
-			atbm_printk_err("now running sta or ap,not idle, maybe have some queue! \n");
 			return false;
 		}
 	}else {
@@ -1802,11 +1180,7 @@ bool ieee80211_internal_scan_triger(struct ieee80211_sub_if_data *sdata,struct c
 
 	local->scan_req = req;
 	local->scan_sdata = sdata;
-	local->scan_n_channels = 0;
-	local->scan_channel_idx = 0;
-	local->scan_channel_space = req->n_channels;
-	local->scan_idle_time = 0;
-	
+
 	__set_bit(SCAN_HW_SCANNING, &local->scanning);
 	__set_bit(SCAN_INTERNAL_SCANNING, &local->scanning);
 	atomic_set(&local->internal_scan_status,IEEE80211_INTERNAL_SCAN_STATUS__IDLE);
@@ -1833,13 +1207,9 @@ bool ieee80211_internal_scan_triger(struct ieee80211_sub_if_data *sdata,struct c
 	if(local->internal_scan.req.req_flags & IEEE80211_INTERNAL_SCAN_FLAGS__SCAN_SPLIT){
 		local->scan_req_wrap.flags |= IEEE80211_SCAN_REQ_SPILT;
 	}
-	if(local->internal_scan.req.req_flags & IEEE80211_INTERNAL_SCAN_FLAGS__NEED_BSSID){
-		local->scan_req_wrap.flags |= IEEE80211_SCAN_REQ_NEED_BSSID;
-		memcpy(local->scan_req_wrap.bssid,local->internal_scan.req.bssid,6);
-	}
 	local->scan_req_wrap.req = local->hw_scan_req;
 	WARN_ON(!ieee80211_prep_hw_scan(local));
-	rc = ieee80211_drv_hw_scan(local, sdata, &local->scan_req_wrap);
+	rc = drv_hw_scan(local, sdata, &local->scan_req_wrap);
 
 	if (rc) {
 		atbm_kfree(local->hw_scan_req);
@@ -1941,7 +1311,7 @@ void ieee80211_scan_cancel(struct ieee80211_local *local)
 	if (test_bit(SCAN_HW_SCANNING, &local->scanning)) {
 		if (local->ops->cancel_hw_scan)
 			drv_cancel_hw_scan(local, local->scan_sdata);
-//		goto out;
+		goto out;
 	}
 
 	/*
@@ -1949,9 +1319,9 @@ void ieee80211_scan_cancel(struct ieee80211_local *local)
 	 * the mutex, but we'll set scan_sdata = NULL and it'll
 	 * simply exit once it acquires the mutex.
 	 */
-	atbm_cancel_delayed_work(&local->scan_work);
+	cancel_delayed_work(&local->scan_work);
 	/* and clean up */
-	__ieee80211_scan_completed(&local->hw, true, test_bit(SCAN_HW_SCANNING, &local->scanning)?true:false);
+	__ieee80211_scan_completed(&local->hw, true, false);
 out:
 	mutex_unlock(&local->mtx);
 }
@@ -2055,7 +1425,7 @@ void ieee80211_sched_scan_results(struct ieee80211_hw *hw)
 }
 //EXPORT_SYMBOL(ieee80211_sched_scan_results);
 
-void ieee80211_sched_scan_stopped_work(struct atbm_work_struct *work)
+void ieee80211_sched_scan_stopped_work(struct work_struct *work)
 {
 	struct ieee80211_local *local =
 		container_of(work, struct ieee80211_local,

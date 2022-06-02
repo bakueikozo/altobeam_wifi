@@ -208,20 +208,13 @@ void atbm_xmit_linearize(struct atbm_common	*hw_priv,
 		for (sg = 0; sg < skb_shinfo(skb)->nr_frags; sg++){
 			
 			skb_frag_t *frag = &skb_shinfo(skb)->frags[sg];
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(5, 0, 0))
-			memcpy(xmit,page_address(frag->bv_page) + frag->bv_offset,frag->bv_len);
-#elif (LINUX_VERSION_CODE < KERNEL_VERSION(3, 2, 0))		
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 2, 0))			
 			memcpy(xmit,page_address(frag->page) + frag->page_offset,frag->size);
 #else
 			memcpy(xmit,page_address(frag->page.p) + frag->page_offset,frag->size);
 #endif
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(5, 0, 0))
-			xmit += frag->bv_len;
-			sg_len += frag->bv_len;
-#else
 			xmit += frag->size;
 			sg_len += frag->size;
-#endif
 		}
 		
 		if(tx_info->sg_tailneed){
@@ -303,13 +296,13 @@ void atbm_destroy_wsm_cmd(struct atbm_common *hw_priv)
 	/*
 	*flush work
 	*/
-	atbm_flush_workqueue(hw_priv->workqueue);
+	flush_workqueue(hw_priv->workqueue);
 	atbm_printk_exit("Flush hw_priv->workqueue\n");
 	/*
 	*try to release wsm_oper_unlock
 	*/
 #ifdef OPER_CLOCK_USE_SEM
-	atbm_del_timer_sync(&hw_priv->wsm_pm_timer);
+	del_timer_sync(&hw_priv->wsm_pm_timer);
 	spin_lock_bh(&hw_priv->wsm_pm_spin_lock);
 	if(atomic_read(&hw_priv->wsm_pm_running) == 1){
 		atomic_set(&hw_priv->wsm_pm_running, 0);
@@ -327,16 +320,16 @@ void atbm_destroy_wsm_cmd(struct atbm_common *hw_priv)
 		*maybe scan work is runing,here flush it.
 		*/
 		atbm_printk_exit("scan running,maybe need cancle\n");
-		atbm_flush_workqueue(hw_priv->workqueue);
+		flush_workqueue(hw_priv->workqueue);
 		if(atomic_read(&hw_priv->scan.in_progress)&&(hw_priv->scan.status != -ETIMEDOUT) &&
-		   (atbm_hw_cancel_delayed_work(&hw_priv->scan.timeout,true) > 0)){
+		   (atbm_cancle_delayed_work(&hw_priv->scan.timeout,true) > 0)){
 		    atbm_printk_exit("scan running,try to cancle\n");
 			atbm_scan_timeout(&hw_priv->scan.timeout.work);
 		}
 	}
 	atbm_printk_exit("Flush pm and scan\n");
-	atbm_flush_workqueue(hw_to_local(hw_priv->hw)->workqueue);
-	atbm_flush_workqueue(hw_priv->workqueue);
+	flush_workqueue(hw_to_local(hw_priv->hw)->workqueue);
+	flush_workqueue(hw_priv->workqueue);
 	
 	synchronize_net();
 }

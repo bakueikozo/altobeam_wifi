@@ -50,12 +50,8 @@ int atbm_register_bh(struct atbm_common *hw_priv)
 		err = PTR_ERR(hw_priv->bh_thread);
 		hw_priv->bh_thread = NULL;
 	} else {
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(5, 9, 8))
-		sched_set_fifo_low(hw_priv->bh_thread);
-#else
 		sched_setscheduler(hw_priv->bh_thread,
 			SCHED_FIFO, &param);
-#endif
 #ifdef HAS_PUT_TASK_STRUCT
 		get_task_struct(hw_priv->bh_thread);
 #endif
@@ -174,7 +170,7 @@ int atbm_rx_bh_cb(struct atbm_common *hw_priv,struct sk_buff *skb)
 	wsm_id	= __le32_to_cpu(wsm->id) & 0xFFF;
 	wsm_seq = (__le32_to_cpu(wsm->id) >> 13) & 7;
 
-//	BUG_ON(wsm_len > 4096);
+	BUG_ON(wsm_len > 4096);
 	atbm_skb_trim(skb,0);
 	atbm_skb_put(skb,wsm_len);
 
@@ -238,11 +234,11 @@ int atbm_rx_single_channel_bh_cb(struct atbm_common *hw_priv,struct sk_buff *skb
 
 	wsm = (struct wsm_hdr *)skb->data;
 
-	wsm_len = __le16_to_cpu(wsm->len);
+	wsm_len = __le32_to_cpu(wsm->len);
 
-	wsm_id	= __le16_to_cpu(wsm->id) & 0xFFF;
+	wsm_id	= __le32_to_cpu(wsm->id) & 0xFFF;
 
-	//BUG_ON(wsm_len > 4096);
+	BUG_ON(wsm_len > 4096);
 	atbm_skb_trim(skb,0);
 	atbm_skb_put(skb,wsm_len);
 
@@ -596,7 +592,6 @@ restart:
 	while ((skb = atbm_skb_dequeue(&hw_priv->rx_frame_free)) != NULL) {
 		/*atbm transmit packet to device*/			
 		hw_priv->sbus_ops->lock(hw_priv->sbus_priv);
-		
 		hw_priv->sbus_ops->sbus_read_async(hw_priv->sbus_priv,0x2,skb,RX_BUFFER_SIZE,NULL);
 		hw_priv->sbus_ops->unlock(hw_priv->sbus_priv);	
 	}
@@ -886,7 +881,7 @@ static int usb_atbm_bh(void *arg)
 			bool scanto_running = false;
 			atbm_priv_vif_list_read_unlock(&scan_priv->vif_lock);
 			mutex_unlock(&hw_priv->conf_mutex);
-			scanto_running = atbm_hw_cancel_delayed_work(&hw_priv->scan.timeout,true);
+			scanto_running = atbm_cancle_delayed_work(&hw_priv->scan.timeout,true);
 			mutex_lock(&hw_priv->conf_mutex);
 			if(scanto_running>0)
 			{
@@ -935,41 +930,41 @@ static int usb_atbm_bh(void *arg)
 			//cancel pendding work
 			#define ATBM_CANCEL_PENDDING_WORK(work,work_func)			\
 				do{														\
-					if(atbm_hw_cancel_queue_work(work,true)==true)			\
+					if(atbm_cancle_queue_work(work,true)==true)			\
 					{													\
 						work_func(work);								\
 					}													\
 				}														\
 				while(0)
 					
-			if(atbm_hw_cancel_delayed_work(&hw_priv->scan.probe_work,true))
+			if(atbm_cancle_delayed_work(&hw_priv->scan.probe_work,true))
 				atbm_probe_work(&hw_priv->scan.probe_work.work);
-			if(atbm_hw_cancel_delayed_work(&hw_priv->scan.timeout,true))
+			if(atbm_cancle_delayed_work(&hw_priv->scan.timeout,true))
 				atbm_scan_timeout(&hw_priv->scan.timeout.work);
 #ifdef CONFIG_ATBM_SUPPORT_P2P
-			if(atbm_hw_cancel_delayed_work(&hw_priv->rem_chan_timeout,true))
+			if(atbm_cancle_delayed_work(&hw_priv->rem_chan_timeout,true))
 				atbm_rem_chan_timeout(&hw_priv->rem_chan_timeout.work);
 #endif
 			ATBM_CANCEL_PENDDING_WORK(&hw_priv->scan.work,atbm_scan_work);
 			ATBM_CANCEL_PENDDING_WORK(&hw_priv->event_handler,atbm_event_handler);
 #ifdef CONFIG_ATBM_BA_STAT
 			ATBM_CANCEL_PENDDING_WORK(&hw_priv->ba_work,atbm_ba_work);		
-			atbm_del_timer_sync(&hw_priv->ba_timer);
+			del_timer_sync(&hw_priv->ba_timer);
 #endif
 #ifdef ATBM_SUPPORT_WIDTH_40M
 #ifdef CONFIG_ATBM_40M_AUTO_CCA
 			ATBM_CANCEL_PENDDING_WORK(&hw_priv->get_cca_work,atbm_get_cca_work);
-			atbm_del_timer_sync(&hw_priv->chantype_timer);
+			del_timer_sync(&hw_priv->chantype_timer);
 #endif
 #endif
 #ifdef ATBM_SUPPORT_SMARTCONFIG
 			ATBM_CANCEL_PENDDING_WORK(&hw_priv->scan.smartwork,atbm_smart_scan_work);
 			ATBM_CANCEL_PENDDING_WORK(&hw_priv->scan.smartsetChanwork,atbm_smart_setchan_work);
 			ATBM_CANCEL_PENDDING_WORK(&hw_priv->scan.smartstopwork,atbm_smart_stop_work);
-			atbm_del_timer_sync(&hw_priv->smartconfig_expire_timer);
+			del_timer_sync(&hw_priv->smartconfig_expire_timer);
 #endif
 #ifdef CONFIG_ATBM_BA_STATUS
-			atbm_del_timer_sync(&hw_priv->ba_timer);
+			del_timer_sync(&hw_priv->ba_timer);
 #endif
 #ifndef CONFIG_RATE_HW_CONTROL
 			ATBM_CANCEL_PENDDING_WORK(&hw_priv->tx_policy_upload_work,tx_policy_upload_work);
@@ -1004,31 +999,31 @@ static int usb_atbm_bh(void *arg)
 #ifdef ATBM_SUPPORT_WIDTH_40M
 #ifdef CONFIG_ATBM_40M_AUTO_CCA
 				//ATBM_CANCEL_PENDDING_WORK(&priv->chantype_change_work, atbm_channel_type_change_work);
-				if(atbm_hw_cancel_delayed_work(&priv->chantype_change_work,true))
+				if(atbm_cancle_delayed_work(&priv->chantype_change_work,true))
 					atbm_channel_type_change_work(&priv->chantype_change_work.work);
 #endif
 #endif
 				
-				atbm_hw_cancel_delayed_work(&priv->dhcp_retry_work,true);
+				atbm_cancle_delayed_work(&priv->dhcp_retry_work,true);
 #ifndef CONFIG_TX_NO_CONFIRM
-				if(atbm_hw_cancel_delayed_work(&priv->bss_loss_work,true))
+				if(atbm_cancle_delayed_work(&priv->bss_loss_work,true))
 					atbm_bss_loss_work(&priv->bss_loss_work.work);
-				if(atbm_hw_cancel_delayed_work(&priv->connection_loss_work,true))
+				if(atbm_cancle_delayed_work(&priv->connection_loss_work,true))
 					atbm_connection_loss_work(&priv->connection_loss_work.work);
 #endif
 #if 0
-				if(atbm_hw_cancel_delayed_work(&priv->set_cts_work,true))
+				if(atbm_cancle_delayed_work(&priv->set_cts_work,true))
 					atbm_set_cts_work(&priv->set_cts_work.work);
 #endif
-				if(atbm_hw_cancel_delayed_work(&priv->link_id_gc_work,true))
+				if(atbm_cancle_delayed_work(&priv->link_id_gc_work,true))
 					atbm_link_id_gc_work(&priv->link_id_gc_work.work);
 #ifdef CONFIG_ATBM_SUPPORT_P2P
-				if(atbm_hw_cancel_delayed_work(&priv->pending_offchanneltx_work,true))
+				if(atbm_cancle_delayed_work(&priv->pending_offchanneltx_work,true))
 					atbm_pending_offchanneltx_work(&priv->pending_offchanneltx_work.work);
 #endif
-				if(atbm_hw_cancel_delayed_work(&priv->join_timeout,true))
+				if(atbm_cancle_delayed_work(&priv->join_timeout,true))
 					atbm_join_timeout(&priv->join_timeout.work);	
-				atbm_del_timer_sync(&priv->mcast_timeout);
+				del_timer_sync(&priv->mcast_timeout);
 			}
 		}
 	}

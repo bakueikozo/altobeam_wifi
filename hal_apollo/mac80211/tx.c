@@ -40,7 +40,7 @@
 
 /* misc utils */
 extern int Atbm_Test_Success;
-extern struct etf_test_config etf_config;
+extern struct test_threshold gthreshold_param;
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
 static __le16 ieee80211_duration(struct ieee80211_tx_data *tx, int group_addr,
 				 int next_frag_len)
@@ -249,7 +249,7 @@ ieee80211_tx_h_dynamic_ps(struct ieee80211_tx_data *tx)
 	if (!ifmgd->associated)
 		return TX_CONTINUE;
 
-	atbm_mod_timer(&tx->sdata->dynamic_ps_timer, jiffies +
+	mod_timer(&tx->sdata->dynamic_ps_timer, jiffies +
 		  msecs_to_jiffies(tx->sdata->vif.bss_conf.dynamic_ps_timeout));
 
 	return TX_CONTINUE;
@@ -441,7 +441,12 @@ static int ieee80211_use_mfp(__le16 fc, struct sta_info *sta,
 
 	if (sta == NULL || !test_sta_flag(sta, WLAN_STA_MFP))
 		return 0;
-	if (!atbm_ieee80211_is_robust_mgmt_frame(skb))
+	#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,15,0))
+	if (!ieee80211_is_robust_mgmt_frame((struct ieee80211_hdr *)
+					    skb->data))
+	#else
+	if (!ieee80211_is_robust_mgmt_frame(skb))
+	#endif
 		return 0;
 
 	return 1;
@@ -490,8 +495,8 @@ ieee80211_tx_h_unicast_ps_buf(struct ieee80211_tx_data *tx)
 		info->flags |= IEEE80211_TX_INTFL_NEED_TXPROCESSING;
 		atbm_skb_queue_tail(&sta->ps_tx_buf[ac], tx->skb);
 
-		if (!atbm_timer_pending(&local->sta_cleanup))
-			atbm_mod_timer(&local->sta_cleanup,
+		if (!timer_pending(&local->sta_cleanup))
+			mod_timer(&local->sta_cleanup,
 				  round_jiffies(jiffies +
 						STA_INFO_CLEANUP_INTERVAL));
 
@@ -551,7 +556,12 @@ ieee80211_tx_h_select_key(struct ieee80211_tx_data *tx)
 		tx->key = key;
 	else if (ieee80211_is_mgmt(hdr->frame_control) &&
 		 is_multicast_ether_addr(hdr->addr1) &&
-		 atbm_ieee80211_is_robust_mgmt_frame(tx->skb) &&
+		 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,15,0))
+		 ieee80211_is_robust_mgmt_frame(hdr) 
+		 #else
+		ieee80211_is_robust_mgmt_frame(tx->skb) 
+		 #endif
+		 &&
 		 (key = rcu_dereference(tx->sdata->default_mgmt_key)))
 		tx->key = key;
 	else if (is_multicast_ether_addr(hdr->addr1) &&
@@ -563,7 +573,13 @@ ieee80211_tx_h_select_key(struct ieee80211_tx_data *tx)
 	else if (tx->sdata->drop_unencrypted &&
 		 (tx->skb->protocol != tx->sdata->control_port_protocol) &&
 		 !(info->flags & IEEE80211_TX_CTL_INJECTED) &&
-		 (!atbm_ieee80211_is_robust_mgmt_frame(tx->skb) ||
+		 (
+		  #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,15,0))
+		 !ieee80211_is_robust_mgmt_frame(hdr) 
+		 #else
+		  !ieee80211_is_robust_mgmt_frame(tx->skb) 
+		 #endif
+		 ||
 		  (ieee80211_is_action(hdr->frame_control) &&
 		   tx->sta && test_sta_flag(tx->sta, WLAN_STA_MFP)))) {
 		I802_DEBUG_INC(tx->local->tx_handlers_drop_unencrypted);
@@ -1371,10 +1387,8 @@ static bool __ieee80211_tx(struct ieee80211_local *local, struct sk_buff **skbp,
 			 * transmission from the tx-pending tasklet when the
 			 * queue is woken again.
 			 */
-			 /*
 			if(local->queue_stop_reasons[q])
 				atbm_printk_always("queue[%d] has been locked\n",q);
-				*/
 			do {
 				next = skb->next;
 				skb->next = NULL;
@@ -1563,7 +1577,9 @@ static int ieee80211_skb_resize(struct ieee80211_sub_if_data *sdata,
 				struct sk_buff *skb,
 				int head_need, bool may_encrypt)
 {
-	//struct ieee80211_local *local = sdata->local;
+#ifdef CONFIG_MAC80211_ATBM_DEBUG_COUNTERS
+	struct ieee80211_local *local = sdata->local;
+#endif
 	int tail_need = 0;
 
 	if (may_encrypt && sdata->crypto_tx_tailroom_needed_cnt) {
@@ -1571,14 +1587,18 @@ static int ieee80211_skb_resize(struct ieee80211_sub_if_data *sdata,
 		tail_need -= atbm_skb_tailroom(skb);
 		tail_need = max_t(int, tail_need, 0);
 	}
-
+#ifdef CONFIG_MAC80211_ATBM_DEBUG_COUNTERS
 	if (atbm_skb_cloned(skb))
 		I802_DEBUG_INC(local->tx_expand_skb_head_cloned);
 	else if (head_need || tail_need)
 		I802_DEBUG_INC(local->tx_expand_skb_head);
 	else
 		return 0;
+#else
+	if ((!(atbm_skb_cloned(skb))) && (!(head_need || tail_need)))
+		return 0;
 
+#endif
 	if (atbm_pskb_expand_head(skb, head_need, tail_need, GFP_ATOMIC)) {
 		atbm_printk_debug("failed to reallocate TX buffer\n");
 		return -ENOMEM;
@@ -1659,10 +1679,8 @@ static void ieee80211_xmit_trydown_special_pkg_rate(struct ieee80211_sub_if_data
 		ieee80211_xmit_down_bootp_rate(sdata,skb);
 	else if(ether_type == ETH_P_PAE)
 		ieee80211_xmit_down_eap_rate(sdata,skb);
-#ifdef ANDROID
 	else if(ether_type == ETH_P_IPV6)
 		ieee80211_xmit_down_ipv6_rate(sdata,skb);
-#endif
 	
 }
 #endif
@@ -1969,8 +1987,7 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 			break;
 		}
 	}
-	if((monitor_relate == true) || 
-	   (sdata && !(sdata->u.mntr_flags & MONITOR_FLAG_COOK_FRAMES))){
+	if(monitor_relate == true){
 		ieee80211_xmit(sdata, skb);
 	}else {
 		atbm_dev_kfree_skb(skb);
@@ -2030,7 +2047,7 @@ netdev_tx_t ieee80211_subif_start_xmit(struct sk_buff *skb,
 	
 #ifdef CONFIG_MAC80211_BRIDGE
 	{
-		struct ieee80211_sub_if_data *tmp_sta = ieee80211_brigde_sdata_check(local,&skb,sdata);
+		struct ieee80211_sub_if_data *tmp_sta = ieee80211_brigde_sdata_check(local,skb,sdata);
 
 		if(tmp_sta != sdata){
 			sdata = tmp_sta;
@@ -2204,7 +2221,7 @@ netdev_tx_t ieee80211_subif_start_xmit(struct sk_buff *skb,
 		{
 				
 #ifdef CONFIG_MAC80211_BRIDGE
-			if (ieee80211_brigde_change_txhdr(sdata,&skb) == -1)
+			if (ieee80211_brigde_change_txhdr(sdata,skb) == -1)
 			{
 				ret = NETDEV_TX_OK;
 				goto fail;
@@ -2972,7 +2989,7 @@ struct sk_buff *ieee80211_qosnullfunc_get(struct ieee80211_hw *hw,
 struct sk_buff *ieee80211_probereq_get(struct ieee80211_hw *hw,
 				       struct ieee80211_vif *vif,
 				       const u8 *ssid, size_t ssid_len,
-				       const u8 *ie, size_t ie_len,u8 *bssid)
+				       const u8 *ie, size_t ie_len)
 {
 	struct ieee80211_sub_if_data *sdata;
 	struct ieee80211_local *local;
@@ -2982,7 +2999,6 @@ struct sk_buff *ieee80211_probereq_get(struct ieee80211_hw *hw,
 	u8 *pos;
 	struct probe_request_extra *extra = NULL;
 	size_t extra_len = 0;
-	u8 bssid_scan[6]={0xff,0xff,0xff,0xff,0xff,0xff};
 	
 	rcu_read_lock();
 	
@@ -3006,15 +3022,14 @@ struct sk_buff *ieee80211_probereq_get(struct ieee80211_hw *hw,
 	}
 
 	atbm_skb_reserve(skb, local->hw.extra_tx_headroom);
-	if(bssid)
-		memcpy(bssid_scan,bssid,6);
+
 	hdr = (struct ieee80211_hdr_3addr *) atbm_skb_put(skb, sizeof(*hdr));
 	memset(hdr, 0, sizeof(*hdr));
 	hdr->frame_control = cpu_to_le16(IEEE80211_FTYPE_MGMT |
 					 IEEE80211_STYPE_PROBE_REQ);
-	memcpy(hdr->addr1, bssid_scan, ETH_ALEN);
+	memset(hdr->addr1, 0xff, ETH_ALEN);
 	memcpy(hdr->addr2, vif->addr, ETH_ALEN);
-	memcpy(hdr->addr3, bssid_scan, ETH_ALEN);
+	memset(hdr->addr3, 0xff, ETH_ALEN);
 	pos = atbm_skb_put(skb, ie_ssid_len);
 	*pos++ = ATBM_WLAN_EID_SSID;
 	*pos++ = ssid_len;
@@ -3177,10 +3192,10 @@ struct sk_buff *ieee80211_probereq_get_etf_v2(struct ieee80211_hw *hw,
 		pAtbm_Ie->oui_type = WIFI_ATBM_IE_OUI_TYPE;
 		pAtbm_Ie->test_type = TXRX_TEST_REQ;
 #ifdef ATBM_PRODUCT_TEST_USE_FEATURE_ID
-		pAtbm_Ie->featureid = etf_config.featureid;
+		pAtbm_Ie->featureid = gthreshold_param.featureid;
 #endif
-		pAtbm_Ie->result[0] = etf_config.rssifilter;
-		pAtbm_Ie->result[1] = etf_config.rxevm;
+		pAtbm_Ie->result[0] = gthreshold_param.rssifilter;
+		pAtbm_Ie->result[1] = gthreshold_param.rxevm;
 		pos +=sizeof(struct ATBM_TEST_IE);
 
 
@@ -3276,7 +3291,7 @@ struct sk_buff *ieee80211_probereq_get_etf_for_send_result(struct ieee80211_hw *
 		pAtbm_Ie->oui_type = WIFI_ATBM_IE_OUI_TYPE;
 		pAtbm_Ie->test_type = TXRX_TEST_RESULT;
 #ifdef ATBM_PRODUCT_TEST_USE_FEATURE_ID
-		pAtbm_Ie->featureid = etf_config.featureid;
+		pAtbm_Ie->featureid = gthreshold_param.featureid;
 #endif
 		if(Atbm_Test_Success == 1){
 			pAtbm_Ie->resverd = TXRX_TEST_PASS;

@@ -14,9 +14,23 @@
 #include "apollo.h"
 #include "sbus.h"
 #include "apollo_plat.h"
+
+#if (ATBM_WIFI_PLATFORM == PLATFORM_INGENICT31)
+
+#define PLATFORMINF	"ingenict31"
+extern int jzmmc_manual_detect(int index, int on);
+//static int WL_REG_EN = 32+25;
+static int WL_REG_EN = 32+26;
+
+//extern	int	gpio_request(SDIO_WIFI_POWER, "sdio_wifi_power_on");
+//extern	int	gpio_direction_output(WL_REG_EN, 0);
+//extern	int	gpio_direction_output(WL_REG_EN, 1);
+#endif
+
 #ifdef SDIO_BUS
 #ifndef CONFIG_ATBM_SDIO_MMC_ID 
 #define CONFIG_ATBM_SDIO_MMC_ID	"mmc0"
+#endif
 #endif
 
 #pragma	message(CONFIG_ATBM_SDIO_MMC_ID)
@@ -120,7 +134,7 @@ static int atbm_platform_power_ctrl(const struct atbm_platform_data *pdata,bool 
 {
 	int ret = 0; 
 #ifndef USB_BUS	
-	#if (ATBM_WIFI_PLATFORM == PLATFORM_XUNWEI) ||(ATBM_WIFI_PLATFORM == PLATFORM_FRIENDLY)
+	#if (ATBM_WIFI_PLATFORM == PLATFORM_XUNWEI) ||(ATBM_WIFI_PLATFORM == PLATFORM_FRIENDLY) 
 	{
 #if (PROJ_TYPE==ARES_A)//for ARESA chip hw reset pin bug
 	enabled = 1;
@@ -128,6 +142,7 @@ static int atbm_platform_power_ctrl(const struct atbm_platform_data *pdata,bool 
 		#ifndef WIFI_FW_DOWNLOAD
 		enabled = 1;
 		#endif //#ifdef WIFI_FW_DOWNLOAD
+
 		if (gpio_request(pdata->power_gpio, "WIFI_POWERON")!=0) {
 			atbm_printk_platform("[altobeam] ERROR:Cannot request WIFI_POWERON\n");
 		} else {
@@ -137,8 +152,27 @@ static int atbm_platform_power_ctrl(const struct atbm_platform_data *pdata,bool 
 			gpio_free(pdata->power_gpio);
 			atbm_printk_platform("[altobeam] + %s :EXYNOS4_GPC1(0) wlan powerwew %s\n",__func__, enabled?"on":"off");
 		}
+
 	}
 	#endif //(ATBM_WIFI_PLATFORM == PLATFORM_XUNWEI) ||(ATBM_WIFI_PLATFORM == PLATFORM_FRIENDLY)
+	
+	#if (ATBM_WIFI_PLATFORM == PLATFORM_INGENICT31)
+	{
+		if(enabled){
+			atbm_printk_platform("[%s] reset altobeam wifi !\n",__func__);
+			
+			gpio_request(WL_REG_EN, "sdio_wifi_power_on");
+		
+			atbm_printk_platform("PLATFORM_INGENICT31 SDIO WIFI_RESET 0 \n");
+			gpio_direction_output(WL_REG_EN, 0);
+			msleep(300);
+			atbm_printk_platform("PLATFORM_INGENICT31 SDIO WIFI_RESET 1 \n");
+			gpio_direction_output(WL_REG_EN, 1);
+			msleep(100);
+		}
+	}
+	#endif
+	
 
 	#if (ATBM_WIFI_PLATFORM == PLATFORM_SUN6I)
 	{
@@ -217,6 +251,15 @@ static int atbm_platform_insert_crtl(const struct atbm_platform_data *pdata,bool
 {
 	int ret = 0;
 #ifdef SDIO_BUS
+	#if (ATBM_WIFI_PLATFORM == PLATFORM_INGENICT31)
+	{
+
+		mdelay(100);
+		jzmmc_manual_detect(1, enabled);
+		atbm_printk_platform("============platform insert crtl====== enable=%d\n", enabled);
+
+	}
+
 	#if (ATBM_WIFI_PLATFORM == PLATFORM_XUNWEI)
 	{
 		int outValue;
@@ -392,8 +435,17 @@ struct atbm_platform_data platform_data = {
 #ifdef SDIO_BUS
 	.mmc_id       = CONFIG_ATBM_SDIO_MMC_ID,
 	.clk_ctrl     = NULL,
+
 	.power_ctrl   = atbm_power_ctrl,
 	.insert_ctrl  = atbm_insert_crtl,
+#if(ATBM_WIFI_PLATFORM == PLATFORM_INGENICT31)
+	.power_ctrl = NULL,
+	//.irq_gpio	= EXYNOS4_GPX2(4),
+	//.power_gpio	= EXYNOS4_GPC1(1),
+    	.irq_gpio	= 60,
+	.power_gpio	= GPIO_PC(12), 
+#endif
+	
 #if(ATBM_WIFI_PLATFORM == PLATFORM_XUNWEI)
 	.irq_gpio	= EXYNOS4_GPX2(4),
 	.power_gpio	= EXYNOS4_GPC1(1),

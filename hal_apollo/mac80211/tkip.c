@@ -224,7 +224,6 @@ void ieee80211_get_tkip_p2k(struct ieee80211_key_conf *keyconf,
  * @payload_len is the length of payload (_not_ including IV/ICV length).
  * @ta is the transmitter addresses.
  */
- #if (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 4, 0))
 int ieee80211_tkip_encrypt_data(struct crypto_cipher *tfm,
 				struct ieee80211_key *key,
 				struct sk_buff *skb,
@@ -237,31 +236,12 @@ int ieee80211_tkip_encrypt_data(struct crypto_cipher *tfm,
 	return ieee80211_wep_encrypt_data(tfm, rc4key, 16,
 					  payload, payload_len);
 }
-#else
-int ieee80211_tkip_encrypt_data(struct arc4_ctx *ctx,
-				struct ieee80211_key *key,
-				struct sk_buff *skb,
-				u8 *payload, size_t payload_len)
-{
-	u8 rc4key[16];
-
-	ieee80211_get_tkip_p2k(&key->conf, skb, rc4key);
-
-	return ieee80211_wep_encrypt_data(ctx, rc4key, 16,
-					  payload, payload_len);
-}
-#endif
 
 /* Decrypt packet payload with TKIP using @key. @pos is a pointer to the
  * beginning of the buffer containing IEEE 802.11 header payload, i.e.,
  * including IV, Ext. IV, real data, Michael MIC, ICV. @payload_len is the
  * length of payload, including IV, Ext. IV, MIC, ICV.  */
-int ieee80211_tkip_decrypt_data(
- #if (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 4, 0))
-				struct crypto_cipher *tfm,
- #else
- 				struct arc4_ctx *ctx,
- #endif
+int ieee80211_tkip_decrypt_data(struct crypto_cipher *tfm,
 				struct ieee80211_key *key,
 				u8 *payload, size_t payload_len, u8 *ta,
 				u8 *ra, int only_iv, int queue,
@@ -364,11 +344,7 @@ int ieee80211_tkip_decrypt_data(
 	}
 #endif
 
- #if (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 4, 0))
 	res = ieee80211_wep_decrypt_data(tfm, rc4key, 16, pos, payload_len - 12);
- #else
- 	res = ieee80211_wep_decrypt_data(ctx, rc4key, 16, pos, payload_len - 12);
- #endif
  done:
 	if (res == TKIP_DECRYPT_OK) {
 		/*

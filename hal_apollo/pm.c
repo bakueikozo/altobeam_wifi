@@ -242,7 +242,7 @@ int atbm_pm_init(struct atbm_pm_state *pm,
 {
 	int ret = atbm_pm_init_common(pm, hw_priv);
 	if (!ret) {
-		atbm_init_timer(&pm->stay_awake);
+		init_timer(&pm->stay_awake);
 		pm->stay_awake.data = (unsigned long)pm;
 		pm->stay_awake.function = atbm_pm_stay_awake_tmo;
 		pm->stayawake_lock.hw_priv = hw_priv;
@@ -253,7 +253,7 @@ int atbm_pm_init(struct atbm_pm_state *pm,
 
 void atbm_pm_deinit(struct atbm_pm_state *pm)
 {
-	atbm_del_timer_sync(&pm->stay_awake);
+	del_timer_sync(&pm->stay_awake);
 	atbm_pm_deinit_common(pm);
 	atbm_pm_deinit_stayawake_lock(&pm->stayawake_lock);
 }
@@ -266,9 +266,9 @@ void atbm_pm_stay_awake(struct atbm_pm_state *pm,
 	
 	spin_lock_irqsave(&pm->lock,flags);
 	cur_tmo = pm->stay_awake.expires - jiffies;
-	if (!atbm_timer_pending(&pm->stay_awake) ||
+	if (!timer_pending(&pm->stay_awake) ||
 			cur_tmo < (long)tmo)
-		atbm_mod_timer(&pm->stay_awake, jiffies + tmo);
+		mod_timer(&pm->stay_awake, jiffies + tmo);
 	spin_unlock_irqrestore(&pm->lock,flags);
 }
 
@@ -313,9 +313,9 @@ void atbm_pm_stay_awake_unlock(struct atbm_pm_state *pm)
 
 #endif
 #ifdef ATBM_SUPPORT_WOW
-static long atbm_suspend_work(struct atbm_delayed_work *work)
+static long atbm_suspend_work(struct delayed_work *work)
 {
-	int ret = atbm_cancel_delayed_work(work);
+	int ret = cancel_delayed_work(work);
 	long tmo;
 	if (ret > 0) {
 		/* Timer is pending */
@@ -329,7 +329,7 @@ static long atbm_suspend_work(struct atbm_delayed_work *work)
 }
 
 static int atbm_resume_work(struct atbm_common *hw_priv,
-			       struct atbm_delayed_work *work,
+			       struct delayed_work *work,
 			       unsigned long tmo)
 {
 	if ((long)tmo < 0)
@@ -503,7 +503,7 @@ int atbm_wow_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	/*
 	*flush all work before susupend
 	*/
-	atbm_flush_workqueue(hw_priv->workqueue);
+	flush_workqueue(hw_priv->workqueue);
 	return ret;
 }
 #ifdef ATBM_SUPPORT_WOW
@@ -522,7 +522,7 @@ static int __atbm_wow_suspend(struct atbm_vif *priv,
         };
 #endif
 	/* Do not suspend when join work is scheduled */
-	if (atbm_work_pending(&priv->join_work))
+	if (work_pending(&priv->join_work))
 		goto revert1;
 
 	/* Set UDP filter */
@@ -587,7 +587,7 @@ static int __atbm_wow_suspend(struct atbm_vif *priv,
 					     priv->if_id);
 	}
 
-	ret = atbm_timer_pending(&priv->mcast_timeout);
+	ret = timer_pending(&priv->mcast_timeout);
 	if (ret)
 		goto revert3;
 

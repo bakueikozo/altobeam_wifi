@@ -128,6 +128,7 @@ struct atbm_sting_s{
 *atbm log level control fs
 *
 */
+//u32 atbm_printk_mask = BIT(0) | BIT(1) | BIT(2) | BIT(3) | BIT(5) | BIT(8) | BIT(16);
 u32 atbm_printk_mask = ATBM_PRINTK_DEFAULT_MASK;
 module_param(atbm_printk_mask, int, 0644);
 
@@ -199,7 +200,6 @@ static struct atbm_printk_mask_table_s printk_mask_table[] = {
 	LOG_TABLE_INIT("LOG_BH",  "output bh level log",ATBM_PRINTK_MASK_BH),
 	LOG_TABLE_INIT("LOG_CFG80211","output cfg80211 level log",ATBM_PRINTK_MASK_CFG80211),
 	LOG_TABLE_INIT("LOG_DEBUG","output cfg80211 level log",ATBM_PRINTK_MASK_DEBUG),
-	LOG_TABLE_INIT("LOG_WSM","output wsm level log",ATBM_PRINTK_MASK_WSM),
 };
 /*
 *
@@ -2534,7 +2534,7 @@ static bool atbm_module_attr_sta_special_scan(struct atbm_common *hw_priv,struct
 			scan_ssid_len = scan_params.ssids.ssids[0].ssid_len;
 		}	
 		res = ieee80211_sta_triger_positive_scan(sdata,scan_params.channels.channels,scan_params.channels.n_channels,
-			  scan_ssid,scan_ssid_len,scan_params.ies.ies,scan_params.ies.ie_len,NULL);
+			  scan_ssid,scan_ssid_len,scan_params.ies.ies,scan_params.ies.ie_len);
 	}else {
 		res = ieee80211_sta_triger_passive_scan(sdata,scan_params.channels.channels,scan_params.channels.n_channels);
 	}
@@ -3470,9 +3470,9 @@ static void atbm_module_driver_caps_show(struct atbm_module_show *show_buff,stru
 	atbm_module_show_put(show_buff,"HIF_TYPE    [%s]\n","SPI");
 #endif 
 #ifdef ATBM_NOT_SUPPORT_40M_CHW
-	atbm_module_show_put(show_buff,"HW_CHW      [%s]\n","20M");
-#else
 	atbm_module_show_put(show_buff,"HW_CHW      [%s]\n","40M");
+#else
+	atbm_module_show_put(show_buff,"HW_CHW      [%s]\n","20M");
 #endif
 #ifdef CONFIG_ATBM_5G_PRETEND_2G
 	atbm_module_show_put(show_buff,"BAND_SUPPORT[%s]\n","5G and 2G");
@@ -3522,161 +3522,6 @@ static ssize_t atbm_module_show_backup_info(struct kobject *kobj,
 
 	return size;
 }
-
-
- static ssize_t atbm_module_show_get_efuse(struct kobject *kobj,
-				  struct kobj_attribute *attr, char *buf)
- {
-	 struct atbm_module_show sys_show;
-	 struct atbm_common *hw_priv = NULL;
-	 struct efuse_headr efuse_data;
-	 
-	 atbm_show_init(&sys_show,buf);
-	 memset(&efuse_data,0, sizeof(struct efuse_headr));
-	 atbm_module_muxlock();
-	 if(atbm_hw_priv_dereference() == NULL){
-		 atbm_module_show_put(&sys_show,"atbm_module_show_get_efuse:system info not exit,please plug chip\n");
-		 goto exit;
-	 }
-	 hw_priv = atbm_hw_priv_dereference();
-	 if (wsm_get_efuse_data(hw_priv, &efuse_data, sizeof(efuse_data)) == 0){ 
-		 if(memcmp(&hw_priv->efuse,&efuse_data,sizeof(efuse_data)) != 0){
-			 atbm_printk_err("atbm_module_show_get_efuse:efsue not same ! \n");
-		 }
-	 }else{
-		 atbm_printk_err("get efsue error! \n");
-		 goto exit;
-	 }
-	 atbm_module_show_put(&sys_show,"dcxo[%d]\n" ,efuse_data.dcxo_trim);
-	 atbm_module_show_put(&sys_show,"gain1[%d]\n" ,efuse_data.delta_gain1);
-	 atbm_module_show_put(&sys_show,"gain2[%d]\n" ,efuse_data.delta_gain2);
-	 atbm_module_show_put(&sys_show,"gain3[%d]\n" ,efuse_data.delta_gain3);
-	 atbm_module_show_put(&sys_show,"mac[%02x:%02x:%02x:%02x:%02x:%02x]\n",
-							  efuse_data.mac[0],efuse_data.mac[1],efuse_data.mac[2]
-							 ,efuse_data.mac[3],efuse_data.mac[4],efuse_data.mac[5]);
-	 
- exit:
-	 atbm_module_muxunlock();
-	 return sys_show.show_count;
- }
- 
- static ssize_t atbm_module_show_first_efuse(struct kobject *kobj,
-			   struct kobj_attribute *attr, char *buf)
- {
-	  struct atbm_module_show sys_show;
-	  struct atbm_common *hw_priv = NULL;
-	  struct efuse_headr efuse_data;
-	  
-	  atbm_show_init(&sys_show,buf);
-	  memset(&efuse_data,0, sizeof(struct efuse_headr));
-	  atbm_module_muxlock();
-	  if(atbm_hw_priv_dereference() == NULL){
-		  atbm_module_show_put(&sys_show,"atbm_module_show_get_efuse:system info not exit,please plug chip\n");
-		  goto exit;
-	  }
-	  hw_priv = atbm_hw_priv_dereference();
-	  if (wsm_get_efuse_first_data(hw_priv, &efuse_data, sizeof(efuse_data)) != 0){ 
-		  atbm_printk_err("get first efsue error! \n");
-		  goto exit;
-	  }
-	  atbm_module_show_put(&sys_show,"dcxo[%d]\n" ,efuse_data.dcxo_trim);
-	  atbm_module_show_put(&sys_show,"gain1[%d]\n" ,efuse_data.delta_gain1);
-	  atbm_module_show_put(&sys_show,"gain2[%d]\n" ,efuse_data.delta_gain2);
-	  atbm_module_show_put(&sys_show,"gain3[%d]\n" ,efuse_data.delta_gain3);
-	  atbm_module_show_put(&sys_show,"mac[%02x:%02x:%02x:%02x:%02x:%02x]\n",
-							   efuse_data.mac[0],efuse_data.mac[1],efuse_data.mac[2]
-							  ,efuse_data.mac[3],efuse_data.mac[4],efuse_data.mac[5]);
-	  
- exit:
-	  atbm_module_muxunlock();
-	  return sys_show.show_count;
- }
- 
- 
- static ssize_t atbm_module_show_remain_efuse(struct kobject *kobj,
-			 struct kobj_attribute *attr, char *buf)
- {
-	 struct atbm_module_show sys_show;
-	 struct atbm_common *hw_priv = NULL;
-	 int remainBit = 0;
- 
-	 atbm_show_init(&sys_show,buf);
-	 
-	 atbm_module_muxlock();
-	 if(atbm_hw_priv_dereference() == NULL){
-		atbm_module_show_put(&sys_show,"atbm_module_show_get_efuse:system info not exit,please plug chip\n");
-		goto exit;
-	 }
-	 hw_priv = atbm_hw_priv_dereference();
-	 if(wsm_get_efuse_remain_bit(hw_priv, &remainBit, sizeof(int)) != 0){
-		 atbm_printk_err("get  efsue reamin space error! \n");
-		  goto exit;
-	 }
-	 
-	 atbm_module_show_put(&sys_show,"reamin Efuse[%d bit]\n" ,remainBit);
- 
- 
- exit:
-	 atbm_module_muxunlock();
-	 return sys_show.show_count;
- }
- 
- static ssize_t atbm_module_show_cfg_power(struct kobject *kobj,
-			 struct kobj_attribute *attr, char *buf)
- {
-	 struct atbm_module_show sys_show;
-	 struct atbm_common *hw_priv = NULL;
-	 struct cfg_txpower_t configured_txpower;
-	 int i,ret;
-	 const char *ratebuf[11] = {"b_1M_2M",
-							 "b_5_5M_11M",
-							 "g_6M_n_6_5M",
-							 "g_9M",
-							 "g_12M_n_13M",
-							 "g_18M_n_19_5M",
-							 "g_24M_n_26M",
-							 "g_36M_n_39M",
-							 "g_48M_n_52M",
-							 "g_54M_n_58_5M",
-							 "n_65M"};
- 
-	 memset(&configured_txpower,0, sizeof(configured_txpower));
- 
-	 atbm_show_init(&sys_show,buf);
-	 
-	 atbm_module_muxlock();
-	 if(atbm_hw_priv_dereference() == NULL){
-		atbm_module_show_put(&sys_show,"atbm_module_show_get_efuse:system info not exit,please plug chip\n");
-		goto exit;
-	 }
-	 hw_priv = atbm_hw_priv_dereference();
-#ifdef CONFIG_TXPOWER_DCXO_VALUE || CONFIG_RATE_TXPOWER
-	 if ((ret = wsm_get_cfg_txpower(hw_priv, (void *)&configured_txpower, sizeof(configured_txpower))) == 0){	 
-		 for(i=0;i<sizeof(configured_txpower.set_txpwr_delta_gain);i++)
-			 atbm_module_show_put(&sys_show,"delta_gain%d:%d\n",i+1,configured_txpower.set_txpwr_delta_gain[i]);
-		 for(i=0;i<sizeof(configured_txpower.set_b_txpwr_delta_gain);i++)
-			 atbm_module_show_put(&sys_show,"b_gain%d:%d\n",i+1,configured_txpower.set_b_txpwr_delta_gain[i]);
-		 for(i=0;i<sizeof(configured_txpower.set_gn_txpwr_delta_gain);i++)
-			 atbm_module_show_put(&sys_show,"gn_gain%d:%d\n",i+1,configured_txpower.set_gn_txpwr_delta_gain[i]);  
-		 atbm_module_show_put(&sys_show,"\n\n");
-		 for(i=0;i<sizeof(configured_txpower.different_rate_txpower_mode);i++)
-			 atbm_module_show_put(&sys_show,"%s:%d\n",ratebuf[i],configured_txpower.different_rate_txpower_mode[i]);
-		 for(i=0;i<sizeof(configured_txpower.different_rate_txpower_mode_40M);i++)
-			 atbm_module_show_put(&sys_show,"%s_40M:%d\n",ratebuf[i],configured_txpower.different_rate_txpower_mode_40M[i]);
-	 }
-	 else{
-		 atbm_printk_err("read configured tx power failed\n");
-	 }
-#else
-	 atbm_printk_err("undefine CONFIG_RATE_TXPOWER or CONFIG_TXPOWER_DCXO_VALUE,so Not support\n");
-#endif
- 
- exit:
-	 atbm_module_muxunlock();
-	 return sys_show.show_count;
- }
-
-
 
 static struct hlist_head *atbm_printk_hash_list(const char *string,unsigned int len)
 {
@@ -3852,46 +3697,6 @@ static bool atbm_module_printk_mask_parase(const char *mask_str,ssize_t msg_len)
 	}
 	return pos == mask_str ? false: true;
 }
-//#include <stdlib.h>
-
-static ssize_t atbm_module_set_printk_level_store(struct kobject *kobj, struct kobj_attribute *attr,
-			   const char *buf, size_t n)
-{
-//	int printk_level;
-	atbm_printk_always("[%s]:%s\n",__func__,buf);
-//	printk_level = atoi(buf);
-	atbm_printk_always("printk_level = %d \n",buf[0]);
-	switch(buf[0]){
-		case 0x30:{
-			atbm_printk_mask = ATBM_PRINTK_CLEAR;
-			atbm_printk_always("ATBM_PRINTK_CLEAR\n");
-			}break;
-		case 0x31:{
-			atbm_printk_mask = ATBM_PRINTK_LEVEL1;
-			atbm_printk_always("ATBM_PRINTK_LEVEL==>1\n");
-			}break;
-		case 0x32:{
-			atbm_printk_mask = ATBM_PRINTK_LEVEL2;
-			atbm_printk_always("ATBM_PRINTK_LEVEL==>2\n");
-			}break;
-		case 0x33:{
-			atbm_printk_mask = ATBM_PRINTK_LEVEL3;
-			atbm_printk_always("ATBM_PRINTK_LEVEL==>3\n");
-			}break;
-		case 0x34:
-		case 0x35:{
-			atbm_printk_mask = ATBM_PRINTK_ALL;
-			atbm_printk_always("ATBM_PRINTK_ALL\n");
-			}break;
-		default:{
-			atbm_printk_always("ATBM_PRINTK_NO_CHANGE\n");	
-		}break;
-	}
-	return -EINVAL;
-}
-
-
-
 static ssize_t atbm_module_printk_mask_store(struct kobject *kobj, struct kobj_attribute *attr,
 			   const char *buf, size_t n)
 {
@@ -4003,11 +3808,6 @@ static struct kobject *atbm_module_kobj = NULL;
 static struct kobj_attribute atbm_module_common_attr  = __ATTR(atbm_cmd, 0644,atbm_module_cmd_show,atbm_module_cmd_store);
 static struct kobj_attribute atbm_module_sysinfo_attr = __ATTR(atbm_sys,  0444,atbm_module_show_system_info, NULL);
 static struct kobj_attribute atbm_module_common_backup_attr = __ATTR(atbm_sys_backup,  0444,atbm_module_show_backup_info, NULL);
-static struct kobj_attribute atbm_module_getefuse_attr = __ATTR(atbm_efuse,  0444,atbm_module_show_get_efuse, NULL);
-static struct kobj_attribute atbm_module_getfirsyefuse_attr = __ATTR(atbm_first_efuse,  0444,atbm_module_show_first_efuse, NULL);
-static struct kobj_attribute atbm_module_remainefuse_attr = __ATTR(atbm_remainEfuseSpace,  0444,atbm_module_show_remain_efuse, NULL);
-static struct kobj_attribute atbm_module_get_rate_power = __ATTR(atbm_get_cfg_power,  0444,atbm_module_show_cfg_power, NULL);
-static struct kobj_attribute atbm_module_set_print_level = __ATTR(atbm_set_print_level,  0644 ,NULL, atbm_module_set_printk_level_store);
 
 static struct kobj_attribute atbm_module_printk_mask = __ATTR(atbm_printk_mask,  0644,atbm_module_printk_mask_show, atbm_module_printk_mask_store);
 
@@ -4016,11 +3816,6 @@ static struct attribute *atbm_module_attribute_group[]= {
 	&atbm_module_common_backup_attr.attr,
 	&atbm_module_sysinfo_attr.attr,
 	&atbm_module_printk_mask.attr,
-	&atbm_module_getefuse_attr.attr,
-	&atbm_module_getfirsyefuse_attr.attr,
-	&atbm_module_remainefuse_attr.attr,
-	&atbm_module_get_rate_power.attr,
-	&atbm_module_set_print_level.attr,
 	NULL,
 };
 static struct attribute_group atbm_module_attr_group = {

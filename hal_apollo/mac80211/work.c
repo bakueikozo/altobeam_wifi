@@ -66,9 +66,9 @@ static void run_again(struct ieee80211_local *local,
 {
 	ASSERT_WORK_MTX(local);
 
-	if (!atbm_timer_pending(&local->work_timer) ||
+	if (!timer_pending(&local->work_timer) ||
 	    time_before(timeout, local->work_timer.expires))
-		atbm_mod_timer(&local->work_timer, timeout);
+		mod_timer(&local->work_timer, timeout);
 }
 #if ((LINUX_VERSION_CODE < KERNEL_VERSION(2,6,40)) || (defined (ATBM_ALLOC_MEM_DEBUG)))
 static void work_free_rcu(struct rcu_head *head)
@@ -497,8 +497,6 @@ ieee80211_authenticate(struct ieee80211_work *wk)
 	struct ieee80211_sub_if_data *sdata = wk->sdata;
 	struct ieee80211_local *local = sdata->local;
 	struct cfg80211_bss *bss;
-	u16 trans = 1;
-	u16 status = 0;
 	
 	if (!wk->probe_auth.synced) {
 		int ret = drv_tx_sync(local, sdata, wk->filter_ta,
@@ -573,19 +571,9 @@ ieee80211_authenticate(struct ieee80211_work *wk)
 	atbm_printk_mgmt("%s: authenticate with %pM (try %d)\n",
 	       sdata->name, wk->filter_ta, wk->probe_auth.tries);
 
-	wk->probe_auth.transaction = 2;
-#ifdef CONFIG_ATBM_SUPPORT_SAE
-//#if (LINUX_VERSION_CODE > KERNEL_VERSION(4, 0, 0))
-	if (wk->probe_auth.algorithm == WLAN_AUTH_SAE) {
-		trans = wk->probe_auth.sae_trans;
-		status = wk->probe_auth.sae_status;
-		wk->probe_auth.transaction = trans;
-	}
-//#endif
-#endif
-	ieee80211_send_auth(sdata, trans, wk->probe_auth.algorithm, status, wk->ie,
+	ieee80211_send_auth(sdata, 1, wk->probe_auth.algorithm, wk->ie,
 			    wk->ie_len, wk->filter_ta, NULL, 0, 0);
-//	wk->probe_auth.transaction = 2;
+	wk->probe_auth.transaction = 2;
 
 	wk->timeout = jiffies + IEEE80211_AUTH_TIMEOUT;
 	run_again(local, wk->timeout);
@@ -759,7 +747,7 @@ static void ieee80211_auth_challenge(struct ieee80211_work *wk,
 	ieee802_11_parse_elems(pos, len - (pos - (u8 *) mgmt), &elems);
 	if (!elems.challenge)
 		return;
-	ieee80211_send_auth(sdata, 3, wk->probe_auth.algorithm, 0,
+	ieee80211_send_auth(sdata, 3, wk->probe_auth.algorithm,
 			    elems.challenge - 2, elems.challenge_len + 2,
 			    wk->filter_ta, wk->probe_auth.key,
 			    wk->probe_auth.key_len, wk->probe_auth.key_idx);
@@ -796,13 +784,6 @@ ieee80211_rx_mgmt_auth(struct ieee80211_work *wk,
 #ifdef CONFIG_MAC80211_ATBM_ROAMING_CHANGES
 		wk->sdata->queues_locked = 0;
 #endif
-		if(status_code == WLAN_STATUS_NOT_SUPPORTED_AUTH_ALG){
-			atbm_printk_err("%s:auhen log err(%d)(%d)\n",__func__,auth_alg,wk->probe_auth.algorithm);
-			/*
-			*triger wpa_supplicant to retransmit an authen frame with the rignt algorithm
-			*/
-			mgmt->u.auth.auth_alg = cpu_to_le16(wk->probe_auth.algorithm);
-		}
 		ieee80211_free_authen_bss(sdata);
 		return WORK_ACT_DONE;
 	}
@@ -811,11 +792,6 @@ ieee80211_rx_mgmt_auth(struct ieee80211_work *wk,
 	case WLAN_AUTH_OPEN:
 	case WLAN_AUTH_LEAP:
 	case WLAN_AUTH_FT:
-#ifdef CONFIG_ATBM_SUPPORT_SAE
-//#if (LINUX_VERSION_CODE > KERNEL_VERSION(4, 0, 0))
-	case WLAN_AUTH_SAE:
-//#endif
-#endif
 		break;
 	case WLAN_AUTH_SHARED_KEY:
 		if (wk->probe_auth.transaction != 4) {
@@ -828,20 +804,6 @@ ieee80211_rx_mgmt_auth(struct ieee80211_work *wk,
 		WARN_ON(1);
 		return WORK_ACT_NONE;
 	}
-
-#if 0
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(4, 0, 0))
-	if (wk->probe_auth.algorithm == WLAN_AUTH_SAE &&
-	    wk->probe_auth.transaction != 2) {
-		/*
-		 * Report auth frame to user space for processing since another
-		 * round of Authentication frames is still needed.
-		 */
-		cfg80211_rx_mlme_mgmt(sdata->dev, (u8 *)mgmt, len);
-		return WORK_ACT_NONE;
-	}
-#endif
-#endif
 
 	atbm_printk_always("%s: authenticated\n", wk->sdata->name);
 	return WORK_ACT_DONE;
@@ -1188,21 +1150,7 @@ static void ieee80211_work_empty_start_pendding(struct ieee80211_local *local)
 		}
 	}
 }
-static bool ieee80211_work_need_sync_channel(struct ieee80211_work *wk)
-{
-	return wk->chan ? true:false;
-}
-#ifdef CONFIG_ATBM_STA_DYNAMIC_PS
-static enum work_action __must_check
-ieee80211_wk_ps_recal(struct ieee80211_work *wk)
-{
-	struct ieee80211_local *local = wk->sdata->local;
-
-	ieee80211_recalc_ps_vif(local,-1);	
-	return WORK_ACT_TIMEOUT;
-}
-#endif
-static void ieee80211_work_work(struct atbm_work_struct *work)
+static void ieee80211_work_work(struct work_struct *work)
 {
 	struct ieee80211_local *local =
 		container_of(work, struct ieee80211_local, work_work);
@@ -1245,44 +1193,40 @@ static void ieee80211_work_work(struct atbm_work_struct *work)
 				continue;
 			}
 		}
-		if(ieee80211_work_need_sync_channel(wk) == true){
-			/* mark work as started if it's on the current off-channel */
-			if (!started && chan_state->tmp_channel &&
-			    wk->chan == chan_state->tmp_channel &&
-			    wk->chan_type == chan_state->tmp_channel_type) {
-			    if((wk->type != IEEE80211_WORK_CONNECTTING)&&(atomic_read(&local->connectting)==0)){
-					started = true;
-					wk->timeout = jiffies;
-			    }
-			}
-			if (!started && !chan_state->tmp_channel) {
-				/*
-				 * TODO: could optimize this by leaving the
-				 *	 station vifs in awake mode if they
-				 *	 happen to be on the same channel as
-				 *	 the requested channel
-				 */
-				atbm_printk_mgmt("%s:start work ch(%d)(%d)\n",__func__,channel_hw_value(wk->chan),wk->type);
-				
-				if(wk->type != IEEE80211_WORK_CONNECTTING){
-	//				ieee80211_offchannel_stop_beaconing(local);
-	//				ieee80211_offchannel_stop_station(local);
-				}
-				else {
-					atomic_set(&wk->sdata->connectting,IEEE80211_ATBM_CONNECT_RUN);
-					atomic_set(&local->connectting,1);
-				}
-
-				chan_state->tmp_channel = wk->chan;
-				chan_state->tmp_channel_type = wk->chan_type;
-				ieee80211_hw_config(local, 0);
+		/* mark work as started if it's on the current off-channel */
+		if (!started && chan_state->tmp_channel &&
+		    wk->chan == chan_state->tmp_channel &&
+		    wk->chan_type == chan_state->tmp_channel_type) {
+		    if((wk->type != IEEE80211_WORK_CONNECTTING)&&(atomic_read(&local->connectting)==0)){
 				started = true;
 				wk->timeout = jiffies;
+		    }
+		}
+		if (!started && !chan_state->tmp_channel) {
+			/*
+			 * TODO: could optimize this by leaving the
+			 *	 station vifs in awake mode if they
+			 *	 happen to be on the same channel as
+			 *	 the requested channel
+			 */
+			atbm_printk_mgmt("%s:start work ch(%d)(%d)\n",__func__,channel_hw_value(wk->chan),wk->type);
+			
+			if(wk->type != IEEE80211_WORK_CONNECTTING){
+//				ieee80211_offchannel_stop_beaconing(local);
+//				ieee80211_offchannel_stop_station(local);
 			}
-		}else {
+			else {
+				atomic_set(&wk->sdata->connectting,IEEE80211_ATBM_CONNECT_RUN);
+				atomic_set(&local->connectting,1);
+			}
+
+			chan_state->tmp_channel = wk->chan;
+			chan_state->tmp_channel_type = wk->chan_type;
+			ieee80211_hw_config(local, 0);
 			started = true;
 			wk->timeout = jiffies;
 		}
+
 		/* don't try to work with items that aren't started */
 		if (!started){			
 			atbm_printk_mgmt("%s:not start work ch(%d)\n",__func__,wk->type);
@@ -1322,11 +1266,6 @@ static void ieee80211_work_work(struct atbm_work_struct *work)
 		case IEEE80211_WORK_CONNECTTING:
 			rma = ieee80211_wk_connecting(wk);
 			break;
-#ifdef CONFIG_ATBM_STA_DYNAMIC_PS
-		case IEEE80211_WORK_PS_RECAL:
-			rma = ieee80211_wk_ps_recal(wk);
-			break;
-#endif
 		}
 
 		wk->started = started;
@@ -1401,10 +1340,8 @@ void ieee80211_add_work(struct ieee80211_work *wk)
 {
 	struct ieee80211_local *local;
 
-#ifndef CONFIG_ATBM_STA_DYNAMIC_PS
 	if (WARN_ON(!wk->chan))
 		return;
-#endif
 
 	if (WARN_ON(!wk->sdata))
 		return;
@@ -1429,9 +1366,9 @@ void ieee80211_work_init(struct ieee80211_local *local)
 {
 	atomic_set(&local->connectting,0);
 	INIT_LIST_HEAD(&local->work_list);
-	atbm_setup_timer(&local->work_timer, ieee80211_work_timer,
+	setup_timer(&local->work_timer, ieee80211_work_timer,
 		    (unsigned long)local);
-	ATBM_INIT_WORK(&local->work_work, ieee80211_work_work);
+	INIT_WORK(&local->work_work, ieee80211_work_work);
 	atbm_skb_queue_head_init(&local->work_skb_queue);
 }
 
@@ -1441,7 +1378,7 @@ void ieee80211_work_purge(struct ieee80211_sub_if_data *sdata)
 	struct ieee80211_work *wk;
 	bool cleanup = false;
 
-	atbm_cancel_work_sync(&sdata->reconfig_filter);
+	cancel_work_sync(&sdata->reconfig_filter);
 
 	mutex_lock(&local->mtx);
 	list_for_each_entry(wk, &local->work_list, list) {
@@ -1538,28 +1475,7 @@ void ieee80211_start_connecting_work(struct ieee80211_sub_if_data *sdata,struct 
 	atomic_set(&sdata->connectting,IEEE80211_ATBM_CONNECT_SET);
 	ieee80211_add_work(wk);
 }
-#ifdef CONFIG_ATBM_STA_DYNAMIC_PS
-static enum work_done_result ieee80211_ps_recal_done(struct ieee80211_work *wk,
-						  struct sk_buff *skb)
-{
-	atbm_printk_debug("%s\n",__func__);
-	return WORK_DONE_DESTROY;
-}
 
-void ieee80211_start_ps_recal_work(struct ieee80211_sub_if_data *sdata)
-{
-	struct ieee80211_work *wk;
-	
-	wk = atbm_kzalloc(sizeof(*wk), GFP_ATOMIC);
-	if (WARN_ON(!wk))
-		return ;
-	
-	wk->sdata = sdata;
-	wk->done  = ieee80211_ps_recal_done;
-	wk->type = IEEE80211_WORK_PS_RECAL;
-	ieee80211_add_work(wk);
-}
-#endif
 void ieee80211_cancle_connecting_work(struct ieee80211_sub_if_data *sdata,u8* bssid,bool delayed)
 {
 	struct ieee80211_work  *wk = NULL;

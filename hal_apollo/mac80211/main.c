@@ -9,7 +9,6 @@
  */
 
 #include <net/atbm_mac80211.h>
-#include <linux/nl80211.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/netdevice.h>
@@ -43,7 +42,6 @@
 #include "cfg.h"
 #include "debugfs.h"
 #include "wext_cfg.h"
-#include "../apollo.h"
 
 //extern int g_connetting;
 #ifdef CONFIG_IF1NAME
@@ -507,13 +505,13 @@ restart:
 #endif
 }
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
-static void ieee80211_restart_work(struct atbm_work_struct *work)
+static void ieee80211_restart_work(struct work_struct *work)
 {
 	struct ieee80211_local *local =
 		container_of(work, struct ieee80211_local, restart_work);
 
 	/* wait for scan work complete */
-	atbm_flush_workqueue(local->workqueue);
+	flush_workqueue(local->workqueue);
 
 	mutex_lock(&local->mtx);
 	WARN(test_bit(SCAN_HW_SCANNING, &local->scanning) 
@@ -542,7 +540,7 @@ void ieee80211_restart_hw(struct ieee80211_hw *hw)
 	ieee80211_stop_queues_by_reason(hw,
 		IEEE80211_QUEUE_STOP_REASON_SUSPEND);
 
-	atbm_schedule_work(&local->restart_work);
+	schedule_work(&local->restart_work);
 }
 //EXPORT_SYMBOL(ieee80211_restart_hw);
 #endif
@@ -557,7 +555,7 @@ int ieee80211_pre_restart_hw_sync(struct ieee80211_hw *hw)
 	ieee80211_scan_cancel(local);	
 	list_for_each_entry(sdata, &local->interfaces, list) {
 		
-		atbm_cancel_work_sync(&sdata->work);
+		cancel_work_sync(&sdata->work);
 	
 		if (!ieee80211_sdata_running(sdata))
 			continue;
@@ -587,10 +585,10 @@ prepare_done:
 	/* make quiescing visible to timers everywhere */
 	mb();
 	
-	atbm_flush_workqueue(local->workqueue);
+	flush_workqueue(local->workqueue);
 
 	list_for_each_entry(sdata, &local->interfaces, list) {
-		atbm_cancel_work_sync(&sdata->work);
+		cancel_work_sync(&sdata->work);
 
 		if (!ieee80211_sdata_running(sdata))
 			continue;
@@ -696,7 +694,7 @@ int  ieee80211_restart_hw_sync(struct ieee80211_hw *hw)
 			ieee80211_bss_info_change_notify(sdata, changed);
 			mutex_unlock(&sdata->u.mgd.mtx);
 			ieee80211_connection_loss(&sdata->vif);
-			atbm_flush_workqueue(local->workqueue);
+			flush_workqueue(local->workqueue);
 			break;
 #ifdef CONFIG_ATBM_SUPPORT_IBSS
 		case NL80211_IFTYPE_ADHOC:
@@ -763,14 +761,14 @@ int  ieee80211_restart_hw_sync(struct ieee80211_hw *hw)
 	list_for_each_entry(sdata, &local->interfaces, list)
 	    drv_set_rts_threshold(local, sdata, sdata->vif.bss_conf.rts_threshold);
 restart_end:
-	atbm_mod_timer(&local->sta_cleanup, jiffies + 1);
+	mod_timer(&local->sta_cleanup, jiffies + 1);
 	ieee80211_wake_queues_by_reason(hw,
 			IEEE80211_QUEUE_STOP_REASON_SUSPEND);
 	return res;
 
 }
 #ifdef CONFIG_ATBM_SMPS
-static void ieee80211_recalc_smps_work(struct atbm_work_struct *work)
+static void ieee80211_recalc_smps_work(struct work_struct *work)
 {
 	struct ieee80211_local *local =
 		container_of(work, struct ieee80211_local, recalc_smps);
@@ -876,7 +874,7 @@ static int ieee80211_ifa_changed(struct notifier_block *nb,
 }
 
 #ifdef IPV6_FILTERING
-static void ieee80211_ifa6_changed_work(struct atbm_work_struct *work)
+static void ieee80211_ifa6_changed_work(struct work_struct *work)
 {
         struct ieee80211_local *local =
                 container_of(work, struct ieee80211_local, ifa6_changed_work);
@@ -968,7 +966,7 @@ static int ieee80211_ifa6_changed(struct notifier_block *nb,
 
         if (sdata->vif.type == NL80211_IFTYPE_STATION) {
                 local->ifa6_sdata = sdata;
-                atbm_schedule_work(&local->ifa6_changed_work);
+                schedule_work(&local->ifa6_changed_work);
 #if 0
                 /* Configure driver only if associated */
                 if (ifmgd->associated) {
@@ -1081,86 +1079,6 @@ void ieee80211_resume_timer(unsigned long data)
 	struct ieee80211_local *local = (struct ieee80211_local *)data;
 	atomic_set(&local->resume_timer_start,0);
 	atbm_printk_pm("end resume\n");
-}
-
-bool ieee80211_clear_extra_ie(struct ieee80211_sub_if_data *sdata,enum ieee80211_special_work_type type)
-{
-	union iee80211_extra_ie *new_extra;
-	union iee80211_extra_ie *old_extra;
-
-	ASSERT_RTNL();
-	
-	switch(type){
-	case IEEE80211_SPECIAL_AP_SPECIAL_BEACON:
-	case IEEE80211_SPECIAL_AP_SPECIAL_PROBRSP:
-		
-		if(sdata->vif.type != NL80211_IFTYPE_AP){
-			return false;
-		}
-		if(rtnl_dereference(sdata->u.ap.beacon) == NULL){
-			return false;
-		}
-
-		if(type == IEEE80211_SPECIAL_AP_SPECIAL_BEACON){
-			old_extra = (union iee80211_extra_ie *)rtnl_dereference(sdata->u.ap.beacon_extra);
-			
-		}else{
-			old_extra = (union iee80211_extra_ie *)rtnl_dereference(sdata->u.ap.probe_response_extra);
-			
-		}
-		
-		break;
-		
-	case IEEE80211_SPECIAL_STA_SPECIAL_PROBR:
-		if(sdata->vif.type != NL80211_IFTYPE_STATION){
-			return false;
-		}
-
-		old_extra = (union iee80211_extra_ie *)rtnl_dereference(sdata->u.mgd.probe_request_extra);
-
-		
-		break;
-	default:
-		return false;
-	}
-
-	new_extra = atbm_kzalloc(sizeof(union iee80211_extra_ie),GFP_KERNEL);
-	
-	if(new_extra == NULL){
-		return false;
-	}
-	
-	new_extra->extra.extra = NULL;
-	new_extra->extra.extra_len = 0;
-	
-	
-	switch(type){
-	case IEEE80211_SPECIAL_AP_SPECIAL_BEACON:
-	case IEEE80211_SPECIAL_AP_SPECIAL_PROBRSP:
-		
-		if(type == IEEE80211_SPECIAL_AP_SPECIAL_BEACON)
-			rcu_assign_pointer(sdata->u.ap.beacon_extra, &new_extra->beacon);
-		else
-			rcu_assign_pointer(sdata->u.ap.probe_response_extra, &new_extra->proberesponse);
-
-		synchronize_rcu();
-		
-		ieee80211_bss_info_change_notify(sdata, BSS_CHANGED_BEACON_ENABLED |
-				BSS_CHANGED_BEACON |
-				BSS_CHANGED_SSID);	
-		
-		break;
-	case IEEE80211_SPECIAL_STA_SPECIAL_PROBR:
-		rcu_assign_pointer(sdata->u.mgd.probe_request_extra,&new_extra->proberequest);
-		synchronize_rcu();
-		break;
-	default:
-		break;
-	}
-
-	if(old_extra)
-		atbm_kfree(old_extra);
-	return true;
 }
 
 bool ieee80211_updata_extra_ie(struct ieee80211_sub_if_data *sdata,enum ieee80211_special_work_type type,
@@ -1296,7 +1214,7 @@ static bool ieee80211_special_work_scan_cb(struct ieee80211_sub_if_data *sdata,v
 	return true;
 }
 bool atbm_internal_cmd_scan_triger(struct ieee80211_sub_if_data *sdata,struct ieee80211_internal_scan_request *req);
-static void ieee80211_special_work(struct atbm_work_struct *work)
+static void ieee80211_special_work(struct work_struct *work)
 {
 	struct ieee80211_local *local =
 		container_of(work, struct ieee80211_local, special_work);
@@ -1348,7 +1266,6 @@ static void ieee80211_special_work(struct atbm_work_struct *work)
 				*special ie err
 				*/
 				if((special_update->special_len == 0)||(special_update->special_ie == NULL)){				
-					ieee80211_clear_extra_ie(sdata,(enum ieee80211_special_work_type)skb->pkt_type);
 					break;
 				}
 				extra.extra.extra     = special_update->special_ie;
@@ -1373,11 +1290,7 @@ static void ieee80211_special_work(struct atbm_work_struct *work)
 				req.ssids      = special_scan->ssid;
 				if(req.ssids)
 					req.n_ssids = 1;
-				if(special_scan->bssid){
-					req.req_flags |= IEEE80211_INTERNAL_SCAN_FLAGS__NEED_BSSID;
-					memcpy(req.bssid,special_scan->bssid,6);
-					atbm_printk_err("[Scan Bssid][%pM]\n",req.bssid);
-				}
+
 				if(skb->pkt_type == IEEE80211_SPECIAL_STA_PASSICE_SCAN)
 					req.req_flags = IEEE80211_INTERNAL_SCAN_FLAGS__PASSAVI_SCAN;
 
@@ -1501,18 +1414,14 @@ static void ieee80211_name_init(struct ieee80211_local *local)
 	local->ieee80211_name_base = NULL;
 	local->ieee80211_name_len = 0;
 	spin_lock_init(&local->ieee80211_name_lock);
-	INIT_LIST_HEAD(&local->ieee80211_name_list);
 }
 static void ieee80211_name_free(struct ieee80211_local *local)
 {
-	struct ieee80211_name_def *def = NULL;
 	spin_lock_bh(&local->ieee80211_name_lock);
-
-	while(!list_empty(&local->ieee80211_name_list)){
-		def = list_first_entry(&local->ieee80211_name_list, struct ieee80211_name_def,list);
-		list_del(&def->list);
-		atbm_kfree(def);
-	}
+	if(local->ieee80211_name_base)
+		atbm_kfree(local->ieee80211_name_base);
+	local->ieee80211_name_base = NULL;
+	local->ieee80211_name_len = 0;
 	spin_unlock_bh(&local->ieee80211_name_lock);
 }
 struct ieee80211_hw *ieee80211_alloc_hw(size_t priv_data_len,
@@ -1556,11 +1465,7 @@ struct ieee80211_hw *ieee80211_alloc_hw(size_t priv_data_len,
 			| WIPHY_FLAG_REPORTS_OBSS
 #endif
 			;
-#ifdef CONFIG_ATBM_SUPPORT_SAE
-//#if (LINUX_VERSION_CODE > KERNEL_VERSION(4, 0, 0))
-	wiphy->features |= NL80211_FEATURE_SAE;
-//#endif
-#endif
+
 	if (!ops->set_key)
 		wiphy->flags |= WIPHY_FLAG_IBSS_RSN;
 
@@ -1588,14 +1493,13 @@ struct ieee80211_hw *ieee80211_alloc_hw(size_t priv_data_len,
 	local->hw.queues = 1;
 	local->hw.max_rates = 1;
 	local->hw.max_report_rates = 0;
-	local->hw.max_rx_aggregation_subframes = 64;//IEEE80211_MAX_AMPDU_BUF;
-	local->hw.max_tx_aggregation_subframes = 64;//IEEE80211_MAX_AMPDU_BUF;
+	local->hw.max_rx_aggregation_subframes = IEEE80211_MAX_AMPDU_BUF;
+	local->hw.max_tx_aggregation_subframes = IEEE80211_MAX_AMPDU_BUF;
 	local->hw.offchannel_tx_hw_queue = IEEE80211_INVAL_HW_QUEUE;
 	local->user_power_level = -1;
 	local->uapsd_queues = IEEE80211_DEFAULT_UAPSD_QUEUES;
 	local->uapsd_max_sp_len = IEEE80211_DEFAULT_MAX_SP_LEN;
 	local->tasklet_running = false;
-	local->adaptive_started = false;
 	
 	INIT_LIST_HEAD(&local->interfaces);
 	mutex_init(&local->iflist_mtx);
@@ -1614,28 +1518,28 @@ struct ieee80211_hw *ieee80211_alloc_hw(size_t priv_data_len,
 	 */
 	skb_queue_head_init_class(&local->rx_skb_queue,
 				  &ieee80211_rx_skb_queue_class);
-	spin_lock_init(&local->rx_path_lock);
-	ATBM_INIT_DELAYED_WORK(&local->scan_work, ieee80211_scan_work);
+
+	INIT_DELAYED_WORK(&local->scan_work, ieee80211_scan_work);
 
 	ieee80211_work_init(local);
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
-	ATBM_INIT_WORK(&local->restart_work, ieee80211_restart_work);
+	INIT_WORK(&local->restart_work, ieee80211_restart_work);
 #endif
-	ATBM_INIT_WORK(&local->special_work,ieee80211_special_work);
+	INIT_WORK(&local->special_work,ieee80211_special_work);
 	atbm_skb_queue_head_init(&local->special_req_list);
 	atbm_common_hash_list_init(local->special_freq_list,ATBM_COMMON_HASHENTRIES);
 	
 #ifdef CONFIG_INET
 #ifdef IPV6_FILTERING
-    ATBM_INIT_WORK(&local->ifa6_changed_work, ieee80211_ifa6_changed_work);
+    INIT_WORK(&local->ifa6_changed_work, ieee80211_ifa6_changed_work);
 #endif /*IPV6_FILTERING*/
 #endif
 #ifdef CONFIG_ATBM_SMPS
-	ATBM_INIT_WORK(&local->recalc_smps, ieee80211_recalc_smps_work);
+	INIT_WORK(&local->recalc_smps, ieee80211_recalc_smps_work);
 #endif
 	local->smps_mode = IEEE80211_SMPS_OFF;
 #ifdef CONFIG_ATBM_SUPPORT_SCHED_SCAN
-	ATBM_INIT_WORK(&local->sched_scan_stopped_work,
+	INIT_WORK(&local->sched_scan_stopped_work,
 		  ieee80211_sched_scan_stopped_work);
 #endif
 
@@ -1663,7 +1567,7 @@ struct ieee80211_hw *ieee80211_alloc_hw(size_t priv_data_len,
 	ieee80211_hw_roc_setup(local);
 #endif
 	atomic_set(&local->resume_timer_start,0);
-	atbm_setup_timer(&local->resume_timer, ieee80211_resume_timer,
+	setup_timer(&local->resume_timer, ieee80211_resume_timer,
 		    (unsigned long)local);
 	ieee80211_scan_internal_int(local);
 	
@@ -1673,7 +1577,6 @@ struct ieee80211_hw *ieee80211_alloc_hw(size_t priv_data_len,
 #ifdef CONFIG_ATBM_APOLLO_DEBUG
 extern int atbm_debug_init_common(void * priv);
 #endif
-static char *init_dev_name = "ALTOBEAM";
 int ieee80211_register_hw(struct ieee80211_hw *hw)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
@@ -1843,12 +1746,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 			local->hw.wiphy->n_cipher_suites--;
 	}
 #ifdef CONFIG_ATBM_USE_SW_ENC
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 4, 0))
 	if (IS_ERR(local->wep_tx_tfm) || IS_ERR(local->wep_rx_tfm)) {
-#else
-	//need find the condition later
-	if (0) {
-#endif
 		if (local->hw.wiphy->cipher_suites == cipher_suites) {
 			local->hw.wiphy->cipher_suites += 2;
 			local->hw.wiphy->n_cipher_suites -= 2;
@@ -1890,12 +1788,10 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		local->hw.wiphy->flags |= WIPHY_FLAG_TDLS_EXTERNAL_SETUP;
 #endif
 #endif
-	
 	result = wiphy_register(local->hw.wiphy);
 	if (result < 0)
 		goto fail_wiphy_register;
-	
-	local->hw.wiphy->dev.init_name = init_dev_name;
+
 	/*
 	 * We use the number of queues for feature tests (QoS, HT) internally
 	 * so restrict them appropriately.
@@ -1904,7 +1800,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		hw->queues = IEEE80211_MAX_QUEUES;
 
 	local->workqueue =
-		atbm_alloc_ordered_workqueue(wiphy_name(local->hw.wiphy), 0);
+		alloc_ordered_workqueue(wiphy_name(local->hw.wiphy), 0);
 	if (!local->workqueue) {
 		result = -ENOMEM;
 		goto fail_workqueue;
@@ -1930,14 +1826,9 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	if (local->hw.max_listen_interval == 0)
 		local->hw.max_listen_interval = 5;
 #ifdef CONFIG_ATBM_USE_SW_ENC
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 4, 0))
 	result = ieee80211_wep_init(local);
-#else
-	ieee80211_wep_init(local);
-	result = 0;
-#endif
 	if (result < 0)
-		atbm_printk_err("Failed to initialize wep: %d\n",
+		wiphy_debug(local->hw.wiphy, "Failed to initialize wep: %d\n",
 			    result);
 #endif
 	rtnl_lock();
@@ -1959,10 +1850,9 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 					  NL80211_IFTYPE_STATION, NULL);
 		if (result)
 			atbm_printk_warn("Failed to add default virtual iface\n");
-#if (ATBM_WIFI_PLATFORM != 12) && (NEED_P2P0_INTERFACE == 1)//CDLINUX no need p2p0
+#if (ATBM_WIFI_PLATFORM != 12)//CDLINUX no need p2p0
 		result = ieee80211_if_add(local, WIFI_IF2NAME, NULL,
 					  NL80211_IFTYPE_STATION, NULL);
-
 		if (result)
 			atbm_printk_warn("Failed to add default virtual p2p iface\n");
 #endif  //#if (ATBM_WIFI_PLATFORM == 11)
@@ -2018,12 +1908,10 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 #endif
 	rtnl_unlock();
 #ifdef CONFIG_ATBM_USE_SW_ENC
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 4, 0))
 	ieee80211_wep_free(local);
 #endif
-#endif
 	sta_info_stop(local);
-	atbm_destroy_workqueue(local->workqueue);
+	destroy_workqueue(local->workqueue);
  fail_workqueue:
 	wiphy_unregister(local->hw.wiphy);
  fail_wiphy_register:
@@ -2063,19 +1951,19 @@ void ieee80211_unregister_hw(struct ieee80211_hw *hw)
 
 	
 	atomic_set(&local->resume_timer_start,0);
-	atbm_del_timer_sync(&local->resume_timer);
+	del_timer_sync(&local->resume_timer);
 	/*
 	 * Now all work items will be gone, but the
 	 * timer might still be armed, so delete it
 	 */
-	atbm_del_timer_sync(&local->work_timer);
+	del_timer_sync(&local->work_timer);
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
-	atbm_cancel_work_sync(&local->restart_work);
+	cancel_work_sync(&local->restart_work);
 #endif
-	atbm_cancel_work_sync(&local->special_work);
+	cancel_work_sync(&local->special_work);
 #ifdef IPV6_FILTERING
 #ifdef CONFIG_INET
-	atbm_cancel_work_sync(&local->ifa6_changed_work);
+	cancel_work_sync(&local->ifa6_changed_work);
 #endif
 #endif /*IPV6_FILTERING*/
 
@@ -2099,14 +1987,12 @@ void ieee80211_unregister_hw(struct ieee80211_hw *hw)
 	 */
 	rcu_barrier();
 #endif
-	atbm_flush_workqueue(local->workqueue);
-	atbm_destroy_workqueue(local->workqueue);
+	flush_workqueue(local->workqueue);
+	destroy_workqueue(local->workqueue);
 	wiphy_unregister(local->hw.wiphy);
 	sta_info_stop(local);
 #ifdef CONFIG_ATBM_USE_SW_ENC
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 4, 0))
 	ieee80211_wep_free(local);
-#endif
 #endif
 	ieee80211_led_exit(local);
 	ieee80211_scan_internal_deinit(local);

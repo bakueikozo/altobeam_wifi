@@ -218,83 +218,6 @@ error:
 
 
 }
-void  atbm_efuse_read_byte(struct atbm_common *priv,u32 byteIndex, u32 *value)
-{
-	//HW_WRITE_REG(0x16b00000, (byteIndex<<8));
-	//*value = HW_READ_REG(0x16b00004);	
-	
-	atbm_direct_write_reg_32(priv,0x16b00000, (byteIndex<<8));
-	atbm_direct_read_reg_32(priv,0x16b00004,value);
-}
-
-u32 atbm_efuse_read_bit(struct atbm_common *priv,u32 bitIndex)
-{
-	u32	efuseBitIndex = bitIndex;
-	u32 byteIndex;
-	u32 value = 0;
-
-	{
-		byteIndex = efuseBitIndex / 8;
-		atbm_efuse_read_byte(priv,byteIndex, &value);
-	}
-	value = value >> (efuseBitIndex % 8);
-	value &= 0x1;
-	return value;
-}
-bool atbm_check_6012B(struct atbm_common *priv)
-{
-	if ((atbm_efuse_read_bit(priv,152) == 1) && (atbm_efuse_read_bit(priv,154) == 1))
-	{
-		printk("Get 6012B UID Success!!\n");
-		return 1;
-	}
-	return 0;
-}
-
-
-
-void  atbm_HwGetChipType(struct atbm_common *priv)
-{
-	u32 chipver = 0;
-
-	atbm_direct_read_reg_32(priv,0x0acc017c,&chipver);
-    chipver&=0xff;
-	
-	switch(chipver)
-	{
-		case 0x14:	
-			priv->chip_version = APOLLO_F;	
-			break;
-		case 0x24:	
-		case 0x25:	
-			//strHwChipFw = ("AthenaB.bin");
-			priv->chip_version = ATHENA_B;
-			break;
-		case 0x45:	
-		case 0x46:	
-		case 0x47:	
-			priv->chip_version = ARES_A;
-			break;	
-		case 0x49:
-			priv->chip_version = ARES_B;
-
-			if(atbm_check_6012B(priv))
-				priv->chip_version = ARES_6012B;
-	
-			break;
-		case 0x64:
-		case 0x65:
-			priv->chip_version = HERA;		
-			break;
-		default:
-			//g_wifi_chip_type = ATHENA_B;
-			atbm_printk_always("%s, <ERROR> cannot read chip id\n",__func__ );
-		
-		break;
-	}
-
-	atbm_printk_always("%s, chipver=0x%x, g_wifi_chip_type[%d]\n",__func__, chipver,priv->chip_version );
-}
 
 char * atbm_HwGetChipFw(struct atbm_common *priv)
 {
@@ -310,7 +233,7 @@ char * atbm_HwGetChipFw(struct atbm_common *priv)
 	}
 #if 0
 	atbm_direct_read_reg_32(priv,0x0acc017c,&chipver);
-	
+	chipver&=0x3f;
 	switch(chipver)
 	{
 		case 0x0:	
@@ -372,10 +295,6 @@ static int atbm_fw_checksum(struct firmware_headr * hdr)
 #else
 #ifdef USB_BUS
 #include "firmware_usb.h"
-#ifdef SUPPORT_ATBM6012B
-#include "firmware_usb_6012b.h"
-#endif
-
 #endif
 #ifdef SDIO_BUS
 #include "firmware_sdio.h"
@@ -560,30 +479,12 @@ loadfw:
 		}
 #else //USED_FW_FILE
 		{
-	
-			/*
-				 chip type select different fw
-			*/
-#ifdef SUPPORT_ATBM6012B
-	
-				if(priv->chip_version == ARES_6012B){//arsB 	
-					atbm_dbg(ATBM_APOLLO_DBG_ERROR,"used firmware_usb_6012b.h=\n");
-					fw_altobeam.hdr.iccm_len = sizeof(fw_code_6012b);
-					fw_altobeam.hdr.dccm_len = sizeof(fw_data_6012b);
-					
-					fw_altobeam.fw_iccm = &fw_code_6012b[0];
-					fw_altobeam.fw_dccm = &fw_data_6012b[0];
-				}else
-#endif
-
-			{
-					atbm_dbg(ATBM_APOLLO_DBG_ERROR,"used firmware.h=\n");
-					fw_altobeam.hdr.iccm_len = sizeof(fw_code);
-					fw_altobeam.hdr.dccm_len = sizeof(fw_data);
-					
-					fw_altobeam.fw_iccm = &fw_code[0];
-					fw_altobeam.fw_dccm = &fw_data[0];
-			}
+		atbm_dbg(ATBM_APOLLO_DBG_ERROR,"used firmware.h=\n");
+		fw_altobeam.hdr.iccm_len = sizeof(fw_code);
+		fw_altobeam.hdr.dccm_len = sizeof(fw_data);
+		
+		fw_altobeam.fw_iccm = &fw_code[0];
+		fw_altobeam.fw_dccm = &fw_data[0];
 		}
 #endif //USED_FW_FILE
 		atbm_set_firmare(&fw_altobeam);

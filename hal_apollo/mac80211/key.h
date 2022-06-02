@@ -13,9 +13,6 @@
 #include <linux/types.h>
 #include <linux/list.h>
 #include <linux/crypto.h>
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-#include <crypto/arc4.h>
-#endif
 #include <linux/rcupdate.h>
 #include <net/atbm_mac80211.h>
 

@@ -57,7 +57,7 @@ struct tx_policy_cache {
  * linux tx retry sequences with a retry policy table in the device.
  */
 void tx_policy_init(struct atbm_common *hw_priv);
-void tx_policy_upload_work(struct atbm_work_struct *work);
+void tx_policy_upload_work(struct work_struct *work);
 #endif
 /* ******************************************************************** */
 /* TX implementation							*/
@@ -89,6 +89,6 @@ int atbm_upload_keys(struct atbm_vif *priv);
 #if 0
 /* ******************************************************************** */
 /* Workaround for WFD test case 6.1.10					*/
-void atbm_link_id_reset(struct atbm_work_struct *work);
+void atbm_link_id_reset(struct work_struct *work);
 #endif
 #endif /* ATBM_APOLLO_TXRX_H */

@@ -40,6 +40,7 @@
 #define	P2P_PROVISION_DISC_RESP				8
 #define	P2POUI							0x506F9A09
 #define ACT_PUBLIC_P2P   9  // WIFI_DIRECT
+#define ATBM_WLAN_CATEGORY_PUBLIC 4 //IEEE 802.11 public action frames
 
 #define _VENDOR_SPECIFIC_IE_		221
 #define	P2P_ATTR_GO_INTENT				0x04
@@ -458,7 +459,7 @@ bool atbm_parase_p2p_action_frame(struct atbm_vif *priv,struct sk_buff *skb,bool
 		return false;
 	}
 
-	if(mgmt->u.action.category != ATBM_WLAN_CATEGORY_PUBLIC){
+	if(mgmt->u.action.category != WLAN_CATEGORY_PUBLIC){
 		return false;
 	}
 

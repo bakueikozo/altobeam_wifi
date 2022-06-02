@@ -53,7 +53,7 @@ void atbm_put_skb(struct atbm_common *hw_priv, struct sk_buff *skb);
 
 int atbm_powerave_sdio_sync(struct atbm_common *hw_priv);
 int atbm_device_wakeup(struct atbm_common *hw_priv);
-void atbm_get_cca_work(struct atbm_work_struct *work);
+void atbm_get_cca_work(struct work_struct *work);
 #ifdef ATBM_SDIO_PATCH
 u16 atbm_CalCheckSum(const u8 *data,u16 len);
 void atbm_packetId_to_seq(struct atbm_common *hw_priv,u32 packetId);
@@ -70,30 +70,30 @@ static inline int atbm_bh_is_term(struct atbm_common *hw_priv){
 #define can_not_queue_work(hw_priv) 					\
 	(((hw_priv)->workqueue==NULL))
 #define atbm_hw_priv_queue_work(hw_priv,work)		\
-	(can_not_queue_work(hw_priv) ? -1:atbm_queue_work((hw_priv)->workqueue,work))
+	(can_not_queue_work(hw_priv) ? -1:queue_work((hw_priv)->workqueue,work))
 #define atbm_hw_priv_queue_delayed_work(hw_priv,dwork,delay)	\
-	(can_not_queue_work(hw_priv) ? -1:atbm_queue_delayed_work((hw_priv)->workqueue,dwork,delay))
-static inline bool atbm_hw_cancel_queue_work(struct atbm_work_struct *work,bool sync)
+	(can_not_queue_work(hw_priv) ? -1:queue_delayed_work((hw_priv)->workqueue,dwork,delay))
+static inline bool atbm_cancle_queue_work(struct work_struct *work,bool sync)
 {
 	bool retval = false;
-	if((sync == true) || atbm_work_pending(work))
+	if((sync == true) || work_pending(work))
 	{
-		retval = atbm_cancel_work_sync(work);
+		retval = cancel_work_sync(work);
 	}
 
 	return retval;
 }
 
-static inline bool atbm_hw_cancel_delayed_work(struct atbm_delayed_work *dwork,bool sync)
+static inline bool atbm_cancle_delayed_work(struct delayed_work *dwork,bool sync)
 {
 	bool retval = false;
 	if(sync == true)
 	{
-		retval = atbm_cancel_delayed_work_sync(dwork);
+		retval = cancel_delayed_work_sync(dwork);
 	}
 	else
 	{
-		retval = atbm_cancel_delayed_work(dwork);
+		retval = cancel_delayed_work(dwork);
 	}
 
 	return retval;

@@ -69,37 +69,6 @@ void atbm_hif_status_set(int status)
 	return;
 }
 
-
-
-#define CHIP_NAME_LEN 10
-#if (PROJ_TYPE>=ARES_A)
-
-const char chip_str[7][CHIP_NAME_LEN]={
-"6032i",
-"6032is",
-"6032it",
-"6012B",
-"NULL",
-"NULL",
-"NULL"
-};
-void set_chip_type(const char *chip);
-
-static char chip_type_str[CHIP_NAME_LEN] = "6032i";
-#elif (PROJ_TYPE < ARES_A)
-static char chip_type_str[CHIP_NAME_LEN] = "6022";
-#endif
-module_param_string(chip_name, chip_type_str,CHIP_NAME_LEN, 0644);
-void set_chip_type(const char *chip)
-{
-	if(chip){
-		memset(chip_type_str,0,10);
-		memcpy(chip_type_str,chip,strlen(chip));
-		atbm_printk_init("current chiptype %s \n",chip_type_str);
-	}
-}
-
-
 extern int wifi_run_sta;
 module_param(wifi_run_sta, int, 0644);
 
@@ -259,6 +228,12 @@ static struct ieee80211_channel atbm_5ghz_chantable[] = {
 };
 #elif defined (CONFIG_ATBM_5G_PRETEND_2G) /* CONFIG_ATBM_APOLLO_5GHZ_SUPPORT */
 #pragma message("ATBM60XX:support 5G channel,but actualy at 2G") 
+/*
+	36 2504
+	38 2380
+	40 2544
+	42 2340
+*/
 static struct ieee80211_channel atbm_5ghz_chantable[] = {
 	CHAN5G_2G(34,36,0),//IEEE80211_CHAN_RADAR
 	CHAN5G_2G(36,36,0),//IEEE80211_CHAN_RADAR
@@ -286,23 +261,6 @@ static struct ieee80211_regdomain atbm_request_regdom = {
                         0/*NL80211_RRF_NO_IR*/),
 	}
 };
-#else
-static struct ieee80211_regdomain atbm_request_regdom = {
-	.n_reg_rules = 3,
-	.alpha2 =  "99",
-	.reg_rules = {
-		/* IEEE 802.11b/g, channels 1..11 */
-		REG_RULE(2412-10, 2462+10, 40, 6, 20, 0),
-		/* IEEE 802.11b/g, channels 12..13. */
-		REG_RULE(2467-10, 2472+10, 40, 6, 20,
-			0/*NL80211_RRF_NO_IR*/),
-		/* IEEE 802.11 channel 14 - Only JP enables
-		 * this and for 802.11b only */
-		REG_RULE(2484-10, 2484+10, 20, 6, 20,
-			0/*NL80211_RRF_NO_IR*/),
-	}
-};
-
 
 #endif
 #ifdef ATBM_NOT_SUPPORT_40M_CHW
@@ -395,11 +353,6 @@ void atbm_set_fw_ver(struct atbm_common *hw_priv)
 {
 	fw_ver = hw_priv->wsm_caps.firmwareVersion;
 }
-void atbm_get_drv_version(short *p)
-{
-	*p = driver_ver;
-}
-
 #ifdef ATBM_SUPPORT_WIDTH_40M
 #ifdef CONFIG_ATBM_40M_AUTO_CCA
 #define CHW_IS_40M			(1)
@@ -482,7 +435,7 @@ void atbm_start_detect_cca(struct atbm_vif *priv,u32 rx_phy_enable_num_req)
 		atbm_printk_err("%s:atbm_get_cca_work err\n",__func__);
 	}
 }
-void atbm_channel_type_change_work(struct atbm_work_struct *work)
+void atbm_channel_type_change_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =  container_of(work, struct atbm_vif, chantype_change_work.work);
 	struct atbm_common *hw_priv = priv->hw_priv;
@@ -591,7 +544,7 @@ void atbm_channel_type_change_work(struct atbm_work_struct *work)
 				atbm_printk_debug( "%s:start get cca\n",__func__);
 				atbm_start_detect_cca(priv,hw_priv->rx_phy_enable_num_req);
 				atomic_set(&hw_priv->cca_detect_running,1);
-				atbm_mod_timer(&hw_priv->chantype_timer,
+				mod_timer(&hw_priv->chantype_timer,
 				jiffies + (atomic_read(&hw_priv->cca_interval_ms)/1000)*HZ+HZ/1000);
 			}
 			atbm_printk_debug( "%s:we can send 40M later\n",__func__);
@@ -605,7 +558,7 @@ void atbm_channel_type_change_work(struct atbm_work_struct *work)
 		{
 			action = notifyPeer40M;
 			atomic_set(&hw_priv->phy_chantype,1);
-			atbm_del_timer_sync(&hw_priv->chantype_timer);
+			del_timer_sync(&hw_priv->chantype_timer);
 			atomic_set(&hw_priv->cca_detect_running,0);
 		}
 	}
@@ -613,7 +566,7 @@ void atbm_channel_type_change_work(struct atbm_work_struct *work)
 	{
 		if(atomic_read(&hw_priv->tx_20M_lock) == 1)
 		{			
-			atbm_del_timer_sync(&hw_priv->chantype_timer);
+			del_timer_sync(&hw_priv->chantype_timer);
 			atomic_set(&hw_priv->cca_detect_running,0);
 			
 			if(ieee80211_chw_is_ht40(temp_channel_type))
@@ -696,7 +649,7 @@ static void atbm_chantype_timer(unsigned long arg)
 	}
 
 }
-void atbm_get_cca_work(struct atbm_work_struct *work)
+void atbm_get_cca_work(struct work_struct *work)
 {
 #define CCA_CHANGE_TO_40M_a  atomic_read(&hw_priv->chw_sw_40M_level)
 #define CCA_CHANGE_TO_20M_a  atomic_read(&hw_priv->chw_sw_20M_level)
@@ -788,7 +741,7 @@ cca_work_end:
 	*/
 	if(can_get)
 	{
-		atbm_mod_timer(&hw_priv->chantype_timer,
+		mod_timer(&hw_priv->chantype_timer,
 		jiffies + (atomic_read(&hw_priv->cca_interval_ms)/1000)*HZ+HZ/1000);
 	//	printk("%s:start chantype_timer\n",__func__);
 	}
@@ -806,7 +759,7 @@ void atbm_clear_wpas_p2p_40M_ie(struct atbm_ieee80211_mgmt *mgmt,u32 pkg_len)
 	int ie_len = 0;
 	struct ieee80211_ht_cap *htcap = NULL;
 	u8 *htcap_ie = NULL;
-	#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 31))
+	#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0))
 	typedef int (*mgmt_filter_handle)(__le16 fc);
 	#else
 	typedef bool (*mgmt_filter_handle)(__le16 fc);
@@ -1055,7 +1008,7 @@ static void atbm_reorder_pkg_timeout(unsigned long arg)
 	atbm_reorder_skb_uplayer(priv,tid_params);
 	index = BUFF_INDEX_IS_SAFE(tid_params->start_seq);
  	if(tid_params->skb_buffed){
-		atbm_mod_timer(&tid_params->overtime_timer,
+		mod_timer(&tid_params->overtime_timer,
 				tid_params->frame_rx_time[index] + (tid_params->timeout*HZ)/1000);
  	}
 	else {
@@ -1189,13 +1142,13 @@ maybe_send_order:
 		//reorder_debug(REORDER_DEBUG,"mod_timer,skb_buffed(%d),start_seq(%x)\n",tid_params->skb_buffed,tid_params->start_seq);
 		set_bit(REORDER_TIMER_RUNING,&tid_params->timer_running);
 		WARN_ON(tid_params->frame_rx_time[index] == 0);
-		atbm_mod_timer(&tid_params->overtime_timer,
+		mod_timer(&tid_params->overtime_timer,
 			tid_params->frame_rx_time[index] + (tid_params->timeout*HZ)/1000);
 	}
 	else if(tid_params->skb_buffed==0)
 	{
 		clear_bit(REORDER_TIMER_RUNING,&tid_params->timer_running);
-		atbm_del_timer_sync(&tid_params->overtime_timer);
+		del_timer_sync(&tid_params->overtime_timer);
 	}
 	res = -1;
 exit_reorder:
@@ -1219,7 +1172,7 @@ void atbm_reorder_func_init(struct atbm_vif *priv)
 			spin_lock_init(&tid_params->skb_reorder_spinlock);
 			tid_params->overtime_timer.data = (unsigned long)tid_params;
 			tid_params->overtime_timer.function = atbm_reorder_pkg_timeout;
-			atbm_init_timer(&tid_params->overtime_timer);
+			init_timer(&tid_params->overtime_timer);
 			//atbm_reorder->atbm_rx_tid[i].skb_reorder_buff = NULL;
 			//atbm_reorder->atbm_rx_tid[i].frame_rx_time = NULL;
 		}
@@ -1247,7 +1200,7 @@ void atbm_reorder_tid_buffed_clear(struct atbm_vif *priv,struct atbm_ba_tid_para
 		return;
 
 	atbm_reorder_skb_forcefree(priv,tid_params,tid_params->wind_size);
-	atbm_del_timer_sync(&tid_params->overtime_timer);
+	del_timer_sync(&tid_params->overtime_timer);
 	clear_bit(REORDER_TIMER_RUNING,&tid_params->timer_running);
 }
 void atbm_reorder_tid_reset(struct atbm_vif *priv,struct atbm_ba_tid_params *tid_params)
@@ -1269,7 +1222,7 @@ void atbm_reorder_tid_reset(struct atbm_vif *priv,struct atbm_ba_tid_params *tid
 	atbm_reorder_skb_forcedrop(priv,tid_params,tid_params->wind_size);
 
 	tid_params->start_seq = 0;
-	atbm_del_timer_sync(&tid_params->overtime_timer);
+	del_timer_sync(&tid_params->overtime_timer);
 	clear_bit(REORDER_TIMER_RUNING,&tid_params->timer_running);
 exit_tid_reset:
 	tid_params_spin_unlock(&tid_params->skb_reorder_spinlock,spin_unlock_bh);
@@ -1460,13 +1413,13 @@ exit_action_rx_delba:
 				//reorder_debug(REORDER_DEBUG,"mod_timer,skb_buffed(%d),start_seq(%x)\n",tid_params->skb_buffed,tid_params->start_seq);
 				set_bit(REORDER_TIMER_RUNING,&tid_params->timer_running);
 				WARN_ON(tid_params->frame_rx_time[index] == 0);
-				atbm_mod_timer(&tid_params->overtime_timer,
+				mod_timer(&tid_params->overtime_timer,
 					tid_params->frame_rx_time[index] + (tid_params->timeout*HZ)/1000);
 			}
 			else if(tid_params->skb_buffed==0)
 			{
 				clear_bit(REORDER_TIMER_RUNING,&tid_params->timer_running);
-				atbm_del_timer_sync(&tid_params->overtime_timer);
+				del_timer_sync(&tid_params->overtime_timer);
 			}
 			tid_params->ssn = ba_params->ssn;
 exit_actin_bar_spin_unlock:
@@ -1769,7 +1722,7 @@ struct ieee80211_hw *atbm_init_common(size_t hw_priv_data_len)
 		    IEEE80211_HW_SUPPORTS_PS |
 		    IEEE80211_HW_SUPPORTS_DYNAMIC_PS |
 		    IEEE80211_HW_REPORTS_TX_ACK_STATUS |
-		    /*IEEE80211_HW_SUPPORTS_UAPSD |*/
+		    IEEE80211_HW_SUPPORTS_UAPSD |
 		    IEEE80211_HW_CONNECTION_MONITOR |
 		    IEEE80211_HW_SUPPORTS_CQM_RSSI |
 		    /* Aggregation is fully controlled by firmware.
@@ -1885,14 +1838,14 @@ struct ieee80211_hw *atbm_init_common(size_t hw_priv_data_len)
 	hw->wiphy->bands[IEEE80211_BAND_5GHZ] = &atbm_band_5ghz;
 #endif /* CONFIG_ATBM_APOLLO_5GHZ_SUPPORT */
 
-//#ifdef  CONFIG_ATBM_5G_PRETEND_2G
+#ifdef  CONFIG_ATBM_5G_PRETEND_2G
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0))
 	hw->wiphy->regulatory_flags = REGULATORY_CUSTOM_REG |REGULATORY_DISABLE_BEACON_HINTS|REGULATORY_COUNTRY_IE_IGNORE;
 #else
 	hw->wiphy->flags |= WIPHY_FLAG_CUSTOM_REGULATORY;
 #endif
 	wiphy_apply_custom_regulatory(hw->wiphy,&atbm_request_regdom);
-//#endif
+#endif
 	/* Channel params have to be cleared before registering wiphy again */
 	for (band = 0; band < IEEE80211_NUM_BANDS; band++) {
 		sband = hw->wiphy->bands[band];
@@ -1926,7 +1879,7 @@ struct ieee80211_hw *atbm_init_common(size_t hw_priv_data_len)
 	mutex_init(&hw_priv->wsm_oper_lock);
 #else
 	sema_init(&hw_priv->wsm_oper_lock, 1);
-	atbm_init_timer(&hw_priv->wsm_pm_timer);
+	init_timer(&hw_priv->wsm_pm_timer);
 	hw_priv->wsm_pm_timer.data = (unsigned long)hw_priv;
 	hw_priv->wsm_pm_timer.function = atbm_pm_timer;
 	spin_lock_init(&hw_priv->wsm_pm_spin_lock);
@@ -1935,53 +1888,53 @@ struct ieee80211_hw *atbm_init_common(size_t hw_priv_data_len)
 #ifdef CONFIG_ATBM_APOLLO_TESTMODE
 	spin_lock_init(&hw_priv->tsm_lock);
 #endif /*CONFIG_ATBM_APOLLO_TESTMODE*/
-	hw_priv->workqueue = atbm_create_singlethread_workqueue(ieee80211_alloc_name(hw,"atbm_wq"));
+	hw_priv->workqueue = create_singlethread_workqueue(ieee80211_alloc_name(hw,"atbm_wq"));
 	sema_init(&hw_priv->scan.lock, 1);
-	ATBM_INIT_WORK(&hw_priv->scan.work, atbm_scan_work);
+	INIT_WORK(&hw_priv->scan.work, atbm_scan_work);
 #ifdef CONFIG_ATBM_SUPPORT_SCHED_SCAN
 #ifdef ROAM_OFFLOAD
-	ATBM_INIT_WORK(&hw_priv->scan.swork, atbm_sched_scan_work);
+	INIT_WORK(&hw_priv->scan.swork, atbm_sched_scan_work);
 #endif /*ROAM_OFFLOAD*/
 #endif
-	ATBM_INIT_DELAYED_WORK(&hw_priv->scan.probe_work, atbm_probe_work);
-	ATBM_INIT_DELAYED_WORK(&hw_priv->scan.timeout, atbm_scan_timeout);
+	INIT_DELAYED_WORK(&hw_priv->scan.probe_work, atbm_probe_work);
+	INIT_DELAYED_WORK(&hw_priv->scan.timeout, atbm_scan_timeout);
 #ifdef CONFIG_ATBM_SCAN_SPLIT
-	ATBM_INIT_DELAYED_WORK(&hw_priv->scan.scan_spilt, atbm_scan_split_work);
+	INIT_DELAYED_WORK(&hw_priv->scan.scan_spilt, atbm_scan_split_work);
 #endif
 //#ifdef CONFIG_WIRELESS_EXT
-	ATBM_INIT_WORK(&hw_priv->etf_tx_end_work, etf_scan_end_work);
+	INIT_WORK(&hw_priv->etf_tx_end_work, etf_scan_end_work);
 	//init_timer(&hw_priv->etf_expire_timer);	
 	//hw_priv->etf_expire_timer.expires = jiffies+1000*HZ;
 	//hw_priv->etf_expire_timer.data = (unsigned long)hw_priv;
 	//hw_priv->etf_expire_timer.function = atbm_etf_test_expire_timer;
 //#endif //#ifdef CONFIG_WIRELESS_EXT
 #ifdef CONFIG_ATBM_APOLLO_TESTMODE
-	ATBM_INIT_DELAYED_WORK(&hw_priv->advance_scan_timeout,
+	INIT_DELAYED_WORK(&hw_priv->advance_scan_timeout,
 		 atbm_advance_scan_timeout);
 #endif
 #ifdef CONFIG_ATBM_SUPPORT_P2P
-	ATBM_INIT_DELAYED_WORK(&hw_priv->rem_chan_timeout, atbm_rem_chan_timeout);
+	INIT_DELAYED_WORK(&hw_priv->rem_chan_timeout, atbm_rem_chan_timeout);
 #endif
 #ifndef CONFIG_RATE_HW_CONTROL
-	ATBM_INIT_WORK(&hw_priv->tx_policy_upload_work, tx_policy_upload_work);
+	INIT_WORK(&hw_priv->tx_policy_upload_work, tx_policy_upload_work);
 #endif
 	spin_lock_init(&hw_priv->event_queue_lock);
 	INIT_LIST_HEAD(&hw_priv->event_queue);
-	ATBM_INIT_WORK(&hw_priv->event_handler, atbm_event_handler);
+	INIT_WORK(&hw_priv->event_handler, atbm_event_handler);
 #ifdef CONFIG_ATBM_BA_STATUS
-	ATBM_INIT_WORK(&hw_priv->ba_work, atbm_ba_work);
+	INIT_WORK(&hw_priv->ba_work, atbm_ba_work);
 	spin_lock_init(&hw_priv->ba_lock);
-	atbm_init_timer(&hw_priv->ba_timer);
+	init_timer(&hw_priv->ba_timer);
 	hw_priv->ba_timer.data = (unsigned long)hw_priv;
 	hw_priv->ba_timer.function = atbm_ba_timer;
 #endif
 	atbm_skb_queue_head_init(&hw_priv->rx_frame_queue);
 	atbm_skb_queue_head_init(&hw_priv->rx_frame_free);
 #ifdef ATBM_SUPPORT_SMARTCONFIG
-	ATBM_INIT_WORK(&hw_priv->scan.smartwork, atbm_smart_scan_work);
-	ATBM_INIT_WORK(&hw_priv->scan.smartsetChanwork, atbm_smart_setchan_work);
-	ATBM_INIT_WORK(&hw_priv->scan.smartstopwork, atbm_smart_stop_work);
-	atbm_init_timer(&hw_priv->smartconfig_expire_timer);	
+	INIT_WORK(&hw_priv->scan.smartwork, atbm_smart_scan_work);
+	INIT_WORK(&hw_priv->scan.smartsetChanwork, atbm_smart_setchan_work);
+	INIT_WORK(&hw_priv->scan.smartstopwork, atbm_smart_stop_work);
+	init_timer(&hw_priv->smartconfig_expire_timer);	
 	hw_priv->smartconfig_expire_timer.data = (unsigned long)hw_priv;
 	hw_priv->smartconfig_expire_timer.function = atbm_smartconfig_expire_timer;
 #endif
@@ -1990,9 +1943,9 @@ struct ieee80211_hw *atbm_init_common(size_t hw_priv_data_len)
 #ifdef ATBM_SDIO_PATCH
 	spin_lock_init(&hw_priv->SeqBitMapLock);
 	INIT_LIST_HEAD(&hw_priv->SeqBitMapList);
-	ATBM_INIT_WORK(&hw_priv->wsm_sync_channl, wsm_sync_channl);
+	INIT_WORK(&hw_priv->wsm_sync_channl, wsm_sync_channl);
 #else
-	ATBM_INIT_WORK(&hw_priv->wsm_sync_channl, wsm_sync_channl_reset);
+	INIT_WORK(&hw_priv->wsm_sync_channl, wsm_sync_channl_reset);
 #endif
 #endif
 	if (unlikely(atbm_queue_stats_init(&hw_priv->tx_queue_stats,
@@ -2024,10 +1977,10 @@ struct ieee80211_hw *atbm_init_common(size_t hw_priv_data_len)
 	hw_priv->chanch_if_id = ATBM_WIFI_MAX_VIFS;
 	mutex_init(&hw_priv->chantype_mutex);
 #ifdef CONFIG_ATBM_40M_AUTO_CCA
-	atbm_init_timer(&hw_priv->chantype_timer);
+	init_timer(&hw_priv->chantype_timer);
 	hw_priv->chantype_timer.data = (unsigned long)hw_priv;
 	hw_priv->chantype_timer.function = atbm_chantype_timer;
-	ATBM_INIT_WORK(&hw_priv->get_cca_work,atbm_get_cca_work);
+	INIT_WORK(&hw_priv->get_cca_work,atbm_get_cca_work);
 #endif
 	hw_priv->rx_phy_enable_num_req = DEFAULT_CCA_INTERVAL_US/DEFAULT_CCA_UTIL_US/3*2; //
 	atomic_set(&hw_priv->cca_interval_ms,DEFAULT_CCA_INTERVAL_MS);
@@ -2092,7 +2045,7 @@ int atbm_register_common(struct ieee80211_hw *dev)
 				err);
 		return err;
 	}
-	atbm_printk_always( "is registered as '%s'\n",
+	atbm_dbg(ATBM_APOLLO_DBG_MSG, "is registered as '%s'\n",
 			wiphy_name(dev->wiphy));
 	return 0;
 }
@@ -2126,11 +2079,10 @@ void atbm_unregister_common(struct ieee80211_hw *dev)
 	
 	hw_priv->init_done = 0;
 	atbm_unregister_bh(hw_priv);
-	atbm_rx_bh_flush(hw_priv);
 	atomic_set(&hw_priv->atbm_pluged,0);
 	atbm_debug_release_common(hw_priv);
 #ifdef OPER_CLOCK_USE_SEM
-	atbm_del_timer_sync(&hw_priv->wsm_pm_timer);
+	del_timer_sync(&hw_priv->wsm_pm_timer);
 	spin_lock_bh(&hw_priv->wsm_pm_spin_lock);
 	if(atomic_read(&hw_priv->wsm_pm_running) == 1){
 		atomic_set(&hw_priv->wsm_pm_running, 0);
@@ -2146,10 +2098,10 @@ void atbm_unregister_common(struct ieee80211_hw *dev)
 		wsm_buf_deinit(&hw_priv->wsm_release_buf[i]);
 #endif
 #ifdef CONFIG_ATBM_BA_STATUS
-	atbm_del_timer_sync(&hw_priv->ba_timer);
+	del_timer_sync(&hw_priv->ba_timer);
 #endif
-	atbm_flush_workqueue(hw_priv->workqueue);
-	atbm_destroy_workqueue(hw_priv->workqueue);
+	flush_workqueue(hw_priv->workqueue);
+	destroy_workqueue(hw_priv->workqueue);
 	hw_priv->workqueue = NULL;
 
 #ifdef CONFIG_HAS_WAKELOCK
@@ -2202,11 +2154,7 @@ static void ABwifi_set_ifce_comb(struct atbm_common *hw_priv,
 #endif
 
 	hw_priv->if_limits1[0].types = BIT(NL80211_IFTYPE_STATION);
-#ifdef CONFIG_ATBM_SUPPORT_MULTIAP
-	hw_priv->if_limits1[1].max = 2;
-#else
 	hw_priv->if_limits1[1].max = 1;
-#endif
 	hw_priv->if_limits1[1].types = BIT(NL80211_IFTYPE_AP);
 
 #ifdef P2P_MULTIVIF
@@ -2289,101 +2237,10 @@ struct atbm_common *g_hw_priv=0;
 //#endif
 #ifdef CONFIG_TXPOWER_DCXO_VALUE
 //txpower and dcxo config file
-char *strfilename = CONFIG_TXPOWER_DCXO_VALUE;
+char strfilename[] = CONFIG_TXPOWER_DCXO_VALUE;
 #else
-char *strfilename = "/tmp/atbm_txpwer_dcxo_cfg.txt";
+char strfilename[] = "";
 #endif
-int get_rate_delta_gain(s8 *dst)
-{
-	int i=0,count = 0,readnum=0,val = 0;
-	char *file = NULL;
-	char readbuf[512] = {0};
-	char *pdata[24] = {NULL};
-	char *pstr = NULL;
-#ifdef CONFIG_RATE_TXPOWER
-	file = CONFIG_RATE_TXPOWER;
-#else
-	file = "/tmp/set_rate_power.txt";
-#endif
-	if(dst == NULL)
-	{
-		atbm_printk_err("Invalid parameter,dst == NULL\n");
-		return -1;
-	}
-	if(file == NULL)
-	{
-		atbm_printk_err("Invalid parameter,file == NULL\n");
-		return -1;
-	}
-	
-	if((readnum = access_file(file,readbuf,sizeof(readbuf),1)) > 0)
-	{
-		pdata[count] = readbuf;
-		count++;
-		//for(i=0;readbuf[i]!=0;i++)
-		for(i = 0;i < readnum;i++)
-		{
-			if((readbuf[i]=='\n') && (count<=22))
-			{	
-				if(readnum != (i+1)){
-					pdata[count] = readbuf+i+1;
-					count++;
-				}
-				readbuf[i] = '\0';
-			}
-		}
-		for(i=0;i<23;i++)
-		{
-			if(pdata[i])
-			{
-				atbm_printk_err("%d,%s\n",i,pdata[i]);
-				pstr=strchr(pdata[i],'=');
-				if(pstr)
-				{
-				
-					sscanf(pstr,"=%d",&val);
-					dst[i] = val;
-					//atbm_printk_err("%d,%s\n",i,pstr);
-					pstr = NULL;
-				}
-			}
-				
-		}
-	}
-		
-	return 0;
-}
-void atbm_get_delta_gain(char *srcData,int *allgain,int *bgain,int *gngain)
-{
-	int i=0;
-	char *databuf = srcData;
-	if((!databuf)||(!allgain)||(!bgain)||(!gngain))
-	{
-		atbm_printk_err("atbm_get_delta_gain fail,invalid parameters\n");
-		return;
-	}
-	for(i=0;i<strlen(databuf);i++)
-		{
-			if(databuf[i] == '\n')
-				databuf[i] = ' ';
-		}
-		sscanf(databuf, "delta_gain1:%d delta_gain2:%d delta_gain3:%d dcxo:%d \
-			b_delta_gain1:%d b_delta_gain2:%d b_delta_gain3:%d \
-			gn_delta_gain1:%d gn_delta_gain2:%d gn_delta_gain3:%d ",
-			&allgain[0], &allgain[1], &allgain[2], &allgain[3],
-			&bgain[0], &bgain[1], &bgain[2],&gngain[0], &gngain[1], &gngain[2]);
-		/*atbm_printk_init("gain1:%d gain2:%d gain3:%d dcxo:%d\nb_gain1:%d b_gain2:%d b_gain3:%d\ngn_gain1:%d gn_gain2:%d gn_gain3:%d\n",
-			allgain[0], allgain[1], allgain[2], allgain[3],
-			bgain[0], bgain[1], bgain[2],gngain[0], gngain[1], gngain[2]);*/
-
-	
-}
-#ifdef CONFIG_ATBM_GET_GPIO4
-extern int readInputValueFromGPIO4(struct atbm_common *hw_priv);
-#endif
-
-static struct ieee80211_supported_band atbm_6012B_band;
-
 int atbm_core_probe(const struct sbus_ops *sbus_ops,
 		      struct sbus_priv *sbus,
 		      struct device *pdev,
@@ -2398,12 +2255,9 @@ int atbm_core_probe(const struct sbus_ops *sbus_ops,
 	};
 	int i = 0;
 	int if_id;
-	char readbuf[256] = "";
-	int deltagain[4]={0};
-	int bgain[3]={0};
-	int gngain[3]={0};
-	//int dcxo = 0;
-	int gpio4 = 1;
+	char readbuf[128] = "";
+	int delta_gain1 = 0,delta_gain2 = 0,delta_gain3 = 0;
+	int dcxo = 0;
 #ifdef CUSTOM_FEATURE_PSM/* To control ps mode */
 	char buffer[2];
     savedpsm = mode.power_mode;
@@ -2576,80 +2430,30 @@ reload_fw:
 				efuse_data.mac[2],efuse_data.mac[3],efuse_data.mac[4],efuse_data.mac[5]);
 		memcpy(&hw_priv->efuse,&efuse_data,sizeof(struct efuse_headr));
 	}
-/*
-	only support HT20 when chip is ATBM6012B
-*/
-
-	if(hw_priv->chip_version == ARES_6012B){
-
-		memcpy(&atbm_6012B_band,&atbm_band_2ghz,sizeof(struct ieee80211_supported_band));
-		hw_priv->hw->wiphy->bands[IEEE80211_BAND_2GHZ] = &atbm_6012B_band;
-		hw_priv->hw->wiphy->bands[IEEE80211_BAND_2GHZ]->ht_cap.cap = 
-				  IEEE80211_HT_CAP_GRN_FLD 
-				| IEEE80211_HT_CAP_SGI_20	
-				| (1 << IEEE80211_HT_CAP_RX_STBC_SHIFT);
-		atbm_printk_init("chip is 6012B not support HT40! \n");
-	}else{
-		hw_priv->hw->wiphy->bands[IEEE80211_BAND_2GHZ] = &atbm_band_2ghz;
+	//use delta_gain and dcxo value in config file,when file is exist
+	if(access_file(strfilename,readbuf,sizeof(readbuf),1) > 0)
+	{
+		atbm_printk_init("param:%s",readbuf);
+		for(i=0;i<strlen(readbuf);i++)
+		{
+			if(readbuf[i] == '\n')
+				readbuf[i] = ' ';
+		}
+		sscanf(readbuf, "delta_gain1:%d delta_gain2:%d delta_gain3:%d dcxo:%d ",
+			&delta_gain1, &delta_gain2, &delta_gain3, &dcxo);
+		atbm_printk_init("delta_gain1:%d delta_gain2:%d delta_gain3:%d dcxo:%d\n",
+			delta_gain1, delta_gain2, delta_gain3, dcxo);
+		memset(readbuf, 0, 128);
+		memset(readbuf, 0, sizeof(readbuf));
+		sprintf(readbuf, "set_txpwr_and_dcxo,%d,%d,%d,%d ", delta_gain1, delta_gain2, delta_gain3, dcxo);
+		
+		atbm_printk_init("cmd: %s\n", readbuf);
+		err = wsm_write_mib(hw_priv, WSM_MIB_ID_FW_CMD, readbuf, strlen(readbuf), if_id);
+		if(err < 0){
+			atbm_printk_err("write mib failed(%d). \n", err);
+		}
 	}
 	
-	//use delta_gain and dcxo value in config file,when file is exist
-	//if(hw_priv->chip_version >= ARES_B){
-#ifdef CONFIG_ATBM_GET_GPIO4
-		//gpio4 = readInputValueFromGPIO4(hw_priv);
-		gpio4 = Atbm_Input_Value_Gpio(hw_priv,4);//choose gpio you want
-#endif
-		if(strfilename && gpio4){
-			if(access_file(strfilename,readbuf,sizeof(readbuf),1) > 0)
-			{
-				atbm_printk_init("param:%s",readbuf);
-				atbm_get_delta_gain(readbuf,deltagain,bgain,gngain);
-				memset(readbuf, 0, sizeof(readbuf));
-				sprintf(readbuf, "set_txpwr_and_dcxo,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d ",deltagain[0], deltagain[1], deltagain[2], deltagain[3],
-					bgain[0], bgain[1], bgain[2],gngain[0], gngain[1], gngain[2]);
-				
-				atbm_printk_init("cmd: %s\n", readbuf);
-				err = wsm_write_mib(hw_priv, WSM_MIB_ID_FW_CMD, readbuf, strlen(readbuf), if_id);
-				if(err < 0){
-					atbm_printk_err("write mib failed(%d). \n", err);
-				}
-			}
-		}
-	//}
-	{
-	/*
-		s8 rate_txpower[23] = {0};//validfalg,data
-		if(get_rate_delta_gain(&rate_txpower[0]) ==  0){
-			for(i=22;i>11;i--)
-				rate_txpower[i] = rate_txpower[i-1];
-			rate_txpower[11] = 1;
-			{
-				if(hw_priv->wsm_caps.firmwareVersion > 12040)
-					err = wsm_write_mib(hw_priv, WSM_MIB_ID_SET_RATE_TX_POWER, rate_txpower, sizeof(rate_txpower), if_id);
-				else
-					err = wsm_write_mib(hw_priv, WSM_MIB_ID_SET_RATE_TX_POWER, rate_txpower, 12, if_id);
-				if(err < 0){
-					atbm_printk_err("write mib failed(%d). \n", err);
-				}
-			}
-		}
-		*/
-			wsm_set_rate_power(hw_priv,1);
-	}	
-
-	{
-		atbm_printk_err("get chip id [%x][%x][%x] \n",
-							hw_priv->wsm_caps.firmeareExCap,
-							hw_priv->wsm_caps.firmeareExCap >> 7,
-							(hw_priv->wsm_caps.firmeareExCap >> 7) & 0x7 
-						);
-#if (PROJ_TYPE>=ARES_A)
-		if(hw_priv->chip_version == ARES_6012B)
-			set_chip_type(chip_str[3]);
-		else
-			set_chip_type(chip_str[(hw_priv->wsm_caps.firmeareExCap >> 7) & 0x7]);
-#endif
-	}
 	err = atbm_register_common(dev);
 	if (err) {
 		goto err3;
@@ -2702,9 +2506,8 @@ int access_file(char *path, char *buffer, int size, int isRead)
 {
 	int ret=0;
 	struct file *fp;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0))
 	mm_segment_t old_fs = get_fs();
-#endif
+
 	if(isRead)
 		fp = filp_open(path,O_RDONLY,S_IRUSR);
 	else
@@ -2726,22 +2529,9 @@ int access_file(char *path, char *buffer, int size, int isRead)
 #endif
 		{
 			fp->f_pos = 0;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0))
 			set_fs(KERNEL_DS);
-#endif
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
-			ret = kernel_read(fp,buffer,size,&fp->f_pos);
-#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 84))
-			ret = kernel_read(fp,fp->f_pos,buffer,size);
-
-#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 14))
-			ret = kernel_read(fp,&fp->f_pos,buffer,size);
-#else
 			ret = vfs_read(fp,buffer,size,&fp->f_pos);
-#endif
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0))
 			set_fs(old_fs);
-#endif
 		}
 	}
 	else
@@ -2752,22 +2542,9 @@ int access_file(char *path, char *buffer, int size, int isRead)
 		}
 		else {
 			fp->f_pos = 0;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0))
 			set_fs(KERNEL_DS);
-#endif
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
-			ret = kernel_write(fp,buffer,size,&fp->f_pos);
-#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 84))
-			ret = kernel_write(fp,buffer,size,fp->f_pos);
-
-#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 14))
-			ret = kernel_write(fp,&fp->f_pos,buffer,size);
-#else
 			ret = vfs_write(fp,buffer,size,&fp->f_pos);
-#endif
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0))
 			set_fs(old_fs);
-#endif
 		}
 	}
 	filp_close(fp,NULL);

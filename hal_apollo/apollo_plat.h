@@ -30,9 +30,12 @@
 #define PLATFORM_CDLINUX			(12)
 #define PLATFORM_AMLOGIC_S805		(13)	
 #define PLATFORM_AMLOGIC_905		(8)	
+#define PLATFORM_INGENICT31			(22)
+
+
 
 #ifndef  ATBM_WIFI_PLATFORM
-#define ATBM_WIFI_PLATFORM			PLATFORM_XUNWEI
+#define ATBM_WIFI_PLATFORM			PLATFORM_INGENICT31
 #endif
 
 #define APOLLO_1505  0
@@ -48,7 +51,6 @@
 #define ARES_A  	 9
 #define ARES_B  	 10
 #define HERA         11
-#define ARES_6012B	  12
 
 
 #ifndef PROJ_TYPE

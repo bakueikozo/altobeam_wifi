@@ -1,7 +1,5 @@
 #ifndef _LINUX_BITOPS_H
 #define _LINUX_BITOPS_H
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0))
-
 #include <asm/types.h>
 
 #ifdef	__KERNEL__
@@ -222,7 +220,6 @@ extern unsigned long find_next_zero_bit(const unsigned long *addr,
 					unsigned long size,
 					unsigned long offset);
 
-#endif/*LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)*/
 #endif /* CONFIG_GENERIC_FIND_NEXT_BIT */
 #endif /* __KERNEL__ */
 #endif

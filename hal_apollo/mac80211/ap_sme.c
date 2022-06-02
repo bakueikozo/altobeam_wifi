@@ -26,8 +26,8 @@
 #include "driver-ops.h"
 #include "rate.h"
 
-static void ieee80211_ap_sme_work(struct atbm_work_struct *work);
-static void ieee80211_ap_sme_event_work(struct atbm_work_struct *work);
+static void ieee80211_ap_sme_work(struct work_struct *work);
+static void ieee80211_ap_sme_event_work(struct work_struct *work);
 static void ieee80211_ap_sme_timer(unsigned long arg);
 static int ieee80211_ap_sme_parse_rsn(const u8 *rsn_ie, size_t rsn_ie_len,
 			 struct atbm_wpa_ie_data *data);
@@ -168,7 +168,7 @@ void ieee80211_ap_sme_queue_mgmt_init(struct ieee80211_sub_if_data *sdata)
 {
 	atbm_printk_ap("%s\n",__func__);
 	atbm_skb_queue_head_init(&sdata->ap_sme_skb_queue);
-	ATBM_INIT_WORK(&sdata->ap_sme_work, ieee80211_ap_sme_work);
+	INIT_WORK(&sdata->ap_sme_work, ieee80211_ap_sme_work);
 	ieee80211_ap_sme_sta_sync_lock_init(sdata);
 	mutex_init(&sdata->ap_sme_mlme_lock);
 }
@@ -188,7 +188,7 @@ void ieee80211_ap_sme_event_init(struct ieee80211_sub_if_data *sdata)
 {
 	atbm_printk_ap("%s\n",__func__);
 	mutex_init(&sdata->ap_sme_event_lock);
-	ATBM_INIT_WORK(&sdata->ap_sme_event_work, ieee80211_ap_sme_event_work);
+	INIT_WORK(&sdata->ap_sme_event_work, ieee80211_ap_sme_event_work);
 	mutex_lock(&sdata->ap_sme_event_lock);
 	INIT_LIST_HEAD(&sdata->ap_sme_event);
 	mutex_unlock(&sdata->ap_sme_event_lock);
@@ -240,7 +240,7 @@ int ieee80211_ap_sme_queue_event(struct ieee80211_sub_if_data *sdata,
 	mutex_unlock(&sdata->ap_sme_event_lock);
 	atbm_printk_ap("%s,event(%d),mac(%pM)\n",__func__,event_id,addr);
 	if(first)
-		atbm_queue_work(sdata->local->workqueue, &sdata->ap_sme_event_work);
+		queue_work(sdata->local->workqueue, &sdata->ap_sme_event_work);
 	
 	ret = 0;
 queue_event_err:
@@ -503,7 +503,7 @@ int ieee80211_ap_sme_tx_mgmt_status(struct ieee80211_sub_if_data *sdata,
 }
 void ieee80211_ap_sme_sta_session_timer_init(struct sta_info *sta)
 {
-	atbm_init_timer(&sta->sta_session_timer);
+	init_timer(&sta->sta_session_timer);
 	sta->sta_session_timer.data = (unsigned long )sta;
 	sta->sta_session_timer.function = ieee80211_ap_sme_timer;
 }
@@ -706,9 +706,9 @@ ieee80211_ap_sme_rx_mgmt_authen(struct ieee80211_sub_if_data *sdata,
 	}
 	atbm_printk_ap("%s:sta(%pM)\n",__func__,mgmt->sa);
 	*status = WLAN_STATUS_SUCCESS;
-	if (!atbm_timer_pending(&sta->sta_session_timer) ||
+	if (!timer_pending(&sta->sta_session_timer) ||
 	    !time_is_after_jiffies(sta->sta_session_timer.expires))
-		atbm_mod_timer(&sta->sta_session_timer, jiffies + 3*HZ);
+		mod_timer(&sta->sta_session_timer, jiffies + 3*HZ);
 	set_sta_flag(sta, WLAN_STA_AUTH);
 athen_end:
 	rcu_read_unlock();
@@ -1830,7 +1830,7 @@ static void ieee80211_ap_sme_tx_mgmt_assoc_status(struct ieee80211_sub_if_data *
 #endif
 	set_sta_flag(sta, WLAN_STA_ASSOC_AP);
 	rcu_read_unlock();
-	atbm_del_timer_sync(&sta->sta_session_timer);
+	del_timer_sync(&sta->sta_session_timer);
 	/*
 	*local->sta_mtx will be unlocked at function sta_info_reinsert
 	*/
@@ -1940,7 +1940,7 @@ static void ieee80211_ap_sme_deauthen_and_disassoc_send_status(
 status_err:
 	atbm_dev_kfree_skb(skb);
 }
-static void ieee80211_ap_sme_work(struct atbm_work_struct *work)
+static void ieee80211_ap_sme_work(struct work_struct *work)
 {
 	struct ieee80211_sub_if_data *sdata =
 		container_of(work, struct ieee80211_sub_if_data, ap_sme_work);
@@ -2041,7 +2041,7 @@ static void ieee80211_ap_sme_work(struct atbm_work_struct *work)
 	mutex_unlock(&sdata->ap_sme_mlme_lock);
 }
 
-static void ieee80211_ap_sme_event_work(struct atbm_work_struct *work)
+static void ieee80211_ap_sme_event_work(struct work_struct *work)
 {
 	struct ieee80211_sub_if_data *sdata =
 		container_of(work, struct ieee80211_sub_if_data, ap_sme_event_work);

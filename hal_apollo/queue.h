@@ -60,9 +60,9 @@ struct atbm_queue {
 	u8			queue_id;
 	u8			generation;
 #ifndef	ATBM_WIFI_QUEUE_LOCK_BUG
-	struct atbm_timer_list	gc;
+	struct timer_list	gc;
 #else
-	struct atbm_timer_list	gc[ATBM_WIFI_MAX_VIFS];
+	struct timer_list	gc[ATBM_WIFI_MAX_VIFS];
 	u8 timer_to_if_id[ATBM_WIFI_MAX_VIFS];
 #endif
 	unsigned long		ttl;

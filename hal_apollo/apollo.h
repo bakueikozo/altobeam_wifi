@@ -92,16 +92,6 @@
 
 #define ATBMWIFI_MAX_STA_IN_AP_MODE	(14)
 #define WLAN_LINK_ID_MAX		(ATBMWIFI_MAX_STA_IN_AP_MODE + 3)
-#define ATBM_UAPSD_VIRTUAL_LINKID					(WLAN_LINK_ID_MAX - 1)
-#define ATBM_DTIM_VIRTUAL_LINKID					(WLAN_LINK_ID_MAX - 2)
-static inline u32 atbm_uapsd_virtual_linkid(void)
-{
-	return ATBM_UAPSD_VIRTUAL_LINKID;
-}
-static inline u32 atbm_dtim_virtual_linkid(void)
-{
-	return ATBM_DTIM_VIRTUAL_LINKID; 
-}
 
 #define ATBM_APOLLO_MAX_STA_IN_AP_MODE		 ATBMWIFI_MAX_STA_IN_AP_MODE
 #define ATBM_APOLLO_MAX_REQUEUE_ATTEMPTS	(5)
@@ -301,7 +291,7 @@ struct atbm_common {
 	spinlock_t			vif_list_lock;
 	u32				if_id_slot;
 	struct device			*pdev;
-	struct atbm_workqueue_struct		*workqueue;
+	struct workqueue_struct		*workqueue;
 	struct sk_buff_head			rx_frame_queue;
 	struct sk_buff_head			rx_frame_free;
 	struct mutex			conf_mutex;
@@ -313,7 +303,7 @@ struct atbm_common {
 	int				hw_type;
 	int				hw_revision;
 	int				fw_revision;
-	int             chip_version;
+
 	/* firmware/hardware info */
 	unsigned int tx_hdr_len;
 
@@ -326,7 +316,7 @@ struct atbm_common {
 	struct smartconfig_config st_cfg;
 	int st_status;
 	int st_configchannel;
-	struct atbm_timer_list smartconfig_expire_timer;
+	struct timer_list smartconfig_expire_timer;
 	struct hmac_configure *config;
 #endif
 	/* calibration, output power limit and rssi<->dBm conversation data */
@@ -359,8 +349,8 @@ struct atbm_common {
 	atomic_t				  channel_chaging;
 	unsigned long						  change_bit;
 	
-	struct atbm_timer_list		  chantype_timer;
-	struct atbm_work_struct		  get_cca_work;
+	struct timer_list		  chantype_timer;
+	struct work_struct		  get_cca_work;
 	atomic_t				  phy_chantype;/*0:20M 1:40M*/
 	atomic_t				  tx_20M_lock;
 	atomic_t				  cca_detect_running;
@@ -394,10 +384,10 @@ struct atbm_common {
 	int				ba_cnt_rx; /*TODO: Same as above */
 	int				ba_acc_rx; /*TODO: Same as above */
 	int				ba_hist; /*TODO: Same as above */
-	struct atbm_timer_list		ba_timer;/*TODO: Same as above */
+	struct timer_list		ba_timer;/*TODO: Same as above */
 	spinlock_t			ba_lock; /*TODO: Same as above */
 	bool				ba_ena; /*TODO: Same as above */
-	struct atbm_work_struct              ba_work; /*TODO: Same as above */
+	struct work_struct              ba_work; /*TODO: Same as above */
 #endif
 	#ifdef CONFIG_PM
 	struct atbm_pm_state		pm_state;
@@ -471,7 +461,7 @@ struct atbm_common {
 	/* Advance Scan */
 	struct advance_scan_elems	advanceScanElems;
 	bool				enable_advance_scan;
-	struct atbm_delayed_work		advance_scan_timeout;
+	struct delayed_work		advance_scan_timeout;
 #endif /* CONFIG_ATBM_APOLLO_TESTMODE */
 
 	/* WSM debug */
@@ -491,11 +481,11 @@ struct atbm_common {
 	/* WSM events */
 	spinlock_t		event_queue_lock;
 	struct list_head	event_queue;
-	struct atbm_work_struct	event_handler;
+	struct work_struct	event_handler;
 #ifndef CONFIG_RATE_HW_CONTROL
 	/* TX rate policy cache */
 	struct tx_policy_cache tx_policy_cache;
-	struct atbm_work_struct tx_policy_upload_work;
+	struct work_struct tx_policy_upload_work;
 #endif
 	spinlock_t		tx_com_lock;
 	spinlock_t		rx_com_lock;
@@ -519,12 +509,12 @@ struct atbm_common {
 	struct mutex			wsm_oper_lock;
 	#else
 	struct semaphore		wsm_oper_lock;
-	struct atbm_timer_list		wsm_pm_timer;
+	struct timer_list		wsm_pm_timer;
 	spinlock_t				wsm_pm_spin_lock;
 	atomic_t				wsm_pm_running;
 	#endif
 #ifdef CONFIG_ATBM_SUPPORT_P2P
-	struct atbm_delayed_work		rem_chan_timeout;
+	struct delayed_work		rem_chan_timeout;
 	atomic_t			remain_on_channel;
 	unsigned long roc_start_time;
 	unsigned long roc_duration;
@@ -577,7 +567,7 @@ struct atbm_common {
 	struct 		semaphore reset_lock;
 #endif
 #ifdef SPI_BUS
-	struct atbm_timer_list spi_status_rx_ready_timer;
+	struct timer_list spi_status_rx_ready_timer;
 #endif
 	//WAKELOCK for android
 	spinlock_t wakelock_spinlock;
@@ -597,8 +587,8 @@ struct atbm_common {
 	u8 bStartTx;
 	u8 bStartTxWantCancel;	
 	u8 etf_test_v2;
-	//struct atbm_timer_list etf_expire_timer;
-	struct atbm_work_struct etf_tx_end_work;
+	//struct timer_list etf_expire_timer;
+	struct work_struct etf_tx_end_work;
 #ifdef SDIO_BUS
 #ifdef ATBM_SDIO_PATCH
 	int dataFlag;
@@ -608,7 +598,7 @@ struct atbm_common {
 	u32 SdioSeq;
 	atomic_t flushed;
 #endif
-	struct atbm_work_struct wsm_sync_channl;
+	struct work_struct wsm_sync_channl;
 	int syncChanl_done;
 	wait_queue_head_t		wsm_synchanl_done;
 #endif
@@ -676,7 +666,7 @@ struct atbm_ba_tid_params
 	struct sk_buff *skb_reorder_buff[BUFF_STORED_LEN];
 	struct sk_buff_head header;
 	unsigned long frame_rx_time[BUFF_STORED_LEN];
-	struct atbm_timer_list		  overtime_timer;
+	struct timer_list		  overtime_timer;
 	spinlock_t	skb_reorder_spinlock;
 	unsigned long timer_running;
 	u16 ssn;
@@ -693,7 +683,7 @@ struct atbm_reorder_queue_comm
 	struct atbm_ba_tid_params		atbm_rx_tid[ATBM_RX_DATA_QUEUES];
 	u8			link_id;
 	struct mutex	reorder_mutex;
-	struct atbm_work_struct		  reorder_work;
+	struct work_struct		  reorder_work;
 };
 void atbm_updata_ba_tid_params(struct atbm_vif *priv,struct atbm_ba_params *ba_params);
 #endif
@@ -750,9 +740,9 @@ struct atbm_vif {
 	struct wsm_ndp_ipv6_filter 	filter6;
 #endif /*IPV6_FILTERING*/
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
-	struct atbm_work_struct		update_filtering_work;
+	struct work_struct		update_filtering_work;
 #endif
-	struct atbm_work_struct		set_beacon_wakeup_period_work;
+	struct work_struct		set_beacon_wakeup_period_work;
 #ifdef CONFIG_PM
 	struct atbm_pm_state_vif	pm_state_vif;
 #endif
@@ -767,21 +757,21 @@ struct atbm_vif {
 	/* WSM Join */
 	enum atbm_join_status	join_status;
 	u8			join_bssid[ETH_ALEN];
-	struct atbm_work_struct	join_work;
-	struct atbm_delayed_work	join_timeout;
-	struct atbm_work_struct	unjoin_work;
+	struct work_struct	join_work;
+	struct delayed_work	join_timeout;
+	struct work_struct	unjoin_work;
 	
 	/* ROC implementation */
 #ifdef CONFIG_ATBM_SUPPORT_P2P
-	struct atbm_work_struct	offchannel_work;
-	struct atbm_delayed_work		pending_offchanneltx_work;
+	struct work_struct	offchannel_work;
+	struct delayed_work		pending_offchanneltx_work;
 #endif
 	int			join_dtim_period;
 	bool			delayed_unjoin;
 
 	/* Security */
 	s8			wep_default_key_id;
-	struct atbm_work_struct	wep_key_work;
+	struct work_struct	wep_key_work;
         unsigned long           rx_timestamp;
         u32                     cipherType;
 
@@ -794,28 +784,28 @@ struct atbm_vif {
 	u32			link_id_max;
 	u32			wsm_key_max_idx;
 	struct atbm_link_entry link_id_db[ATBMWIFI_MAX_STA_IN_AP_MODE];
-	struct atbm_work_struct	link_id_work;
-	struct atbm_delayed_work	link_id_gc_work;
+	struct work_struct	link_id_work;
+	struct delayed_work	link_id_gc_work;
 	u32			sta_asleep_mask;
 	u32			pspoll_mask;
 	bool			aid0_bit_set;
 	spinlock_t		ps_state_lock;
 	bool			buffered_multicasts;
 	bool			tx_multicast;
-	struct atbm_work_struct	set_tim_work;
-//	struct atbm_delayed_work	set_cts_work;
-	struct atbm_work_struct	multicast_start_work;
-	struct atbm_work_struct	multicast_stop_work;
-	struct atbm_timer_list	mcast_timeout;
+	struct work_struct	set_tim_work;
+//	struct delayed_work	set_cts_work;
+	struct work_struct	multicast_start_work;
+	struct work_struct	multicast_stop_work;
+	struct timer_list	mcast_timeout;
 	//dhcp
-	struct atbm_delayed_work	dhcp_retry_work;
+	struct delayed_work	dhcp_retry_work;
 	struct sk_buff *dhcp_retry_skb;
 	spinlock_t		dhcp_retry_spinlock;
 #ifndef CONFIG_TX_NO_CONFIRM
 	/* CQM Implementation */
-	struct atbm_delayed_work	bss_loss_work;
-	struct atbm_delayed_work	connection_loss_work;
-	struct atbm_work_struct	tx_failure_work;
+	struct delayed_work	bss_loss_work;
+	struct delayed_work	connection_loss_work;
+	struct work_struct	tx_failure_work;
 	int			delayed_link_loss;
 	spinlock_t		bss_loss_lock;
 	int			bss_loss_status;
@@ -826,13 +816,13 @@ struct atbm_vif {
 	struct ieee80211_hw	*hw;
 
 	/* Workaround for WFD testcase 6.1.10*/
-	struct atbm_work_struct	linkid_reset_work;
+	struct work_struct	linkid_reset_work;
 	u8			action_frame_sa[ETH_ALEN];
 	u8			action_linkid;
 	bool			htcap;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,3,0))
     u16                     ht_info;
-    struct atbm_work_struct      ht_info_update_work;
+    struct work_struct      ht_info_update_work;
 #endif
 #ifdef ATBM_PKG_REORDER
 	struct atbm_reorder_queue_comm atbm_reorder_link_id[ATBM_APOLLO_LINK_ID_UNMAPPED];
@@ -840,7 +830,7 @@ struct atbm_vif {
 
 #ifdef ATBM_SUPPORT_WIDTH_40M	
 #ifdef CONFIG_ATBM_40M_AUTO_CCA
-     struct atbm_delayed_work		  chantype_change_work;
+     struct delayed_work		  chantype_change_work;
 #endif
 #endif
 #ifdef ATBM_SUPPORT_SMARTCONFIG
@@ -1168,7 +1158,7 @@ for (									\
 #define atbm_hw_priv_dereference()		ATBM_VOLATILE_GET(&g_hw_priv)
 #ifdef ATBM_SUPPORT_WIDTH_40M
 #ifdef CONFIG_ATBM_40M_AUTO_CCA
-void atbm_channel_type_change_work(struct atbm_work_struct *work);
+void atbm_channel_type_change_work(struct work_struct *work);
 #endif
 #ifdef CONFIG_ATBM_SUPPORT_P2P
 void atbm_clear_wpas_p2p_40M_ie(struct atbm_ieee80211_mgmt *mgmt,u32 pkg_len);
@@ -1201,8 +1191,6 @@ extern int atbm_rx_bh_flush(struct atbm_common *hw_priv);
 extern void atbm_bh_halt(struct atbm_common *hw_priv);
 extern void atbm_hif_status_set(int status);
 extern void  atbm_bh_multrx_trace(struct atbm_common *hw_priv,u8 n_rx);
-void atbm_get_drv_version(short *p);
-
 
 #define CAPABILITIES_ATBM_PRIVATE_IE 		BIT(1)
 #define CAPABILITIES_NVR_IPC 				BIT(2)
@@ -1236,13 +1224,5 @@ void atbm_get_drv_version(short *p);
 #define CAPABILITIES_EFUSEI BIT(30)
 #define CAPABILITIES_EFUSEB BIT(31)
 
-#define EX_CAPABILITIES_TWO_CHIP_ONE_SOC			BIT(0)
-#define EX_CAPABILITIES_MANUAL_SET_AC				BIT(1)
-#define EX_CAPABILITIES_LMAC_BW_CONTROL				BIT(2)
-#define EX_CAPABILITIES_SUPPORT_TWO_ANTENNA			BIT(3)
-#define EX_CAPABILITIES_ENABLE_STA_REMAIN_ON_CHANNEL BIT(4)
-#define EX_CAPABILITIES_ENABLE_PS					BIT(5)
-#define EX_CAPABILITIES_TX_REQUEST_FIFO_LINK		BIT(6)
-#define EX_CAPABILITIES_CHIP_TYPE					(BIT(7)|BIT(8)|BIT(9))
 
 #endif /* ATBM_APOLLO_H */

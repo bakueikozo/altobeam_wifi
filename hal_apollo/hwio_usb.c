@@ -131,9 +131,8 @@ int atbm_fw_write(struct atbm_common *priv, u32 addr, const void *buf,
 int atbm_direct_read_reg_32(struct atbm_common *hw_priv, u32 addr, u32 *val)
 {
     int ret;
-	u32 local_val = 0;
-	
-	ret= atbm_ep0_read(hw_priv, addr, &local_val, sizeof(local_val));
+
+	ret= atbm_ep0_read(hw_priv, addr, val, sizeof(int));
 
 	if (ret <= 0) {
 		*val = 0xff;
@@ -143,17 +142,13 @@ int atbm_direct_read_reg_32(struct atbm_common *hw_priv, u32 addr, u32 *val)
 		goto out;
 	}
 
-	*val = le32_to_cpu(local_val);
 out:
 	return ret;
 }
 
 int atbm_direct_write_reg_32(struct atbm_common *hw_priv, u32 addr, u32 val)
 {
-	u32 local_val = cpu_to_le32(val);
-	int ret = 0;
-	
-	ret = atbm_ep0_write(hw_priv, addr, &local_val, sizeof(local_val));
+	int ret = atbm_ep0_write(hw_priv, addr, &val, sizeof(val));
 	if (ret < 0) {
 		atbm_dbg(ATBM_APOLLO_DBG_ERROR,
 			"%s:  can't write " \
@@ -169,30 +164,6 @@ out:
 #define ATBM_READ_REG_TEST 			(0)
 #define ATBM_DEBUG_BUS_TEST			(0)
 
-
-int atbm_usb_write_bit(struct atbm_common *hw_priv,u32 addr,u8 endBit,
-	u8 startBit,u32 data )
-{                                                              
-	u32	uiRegValue=0;                                        
-	u32 regmask=0;
-	int ret = 0;
-	ret=atbm_direct_read_reg_32(hw_priv,addr,&uiRegValue); 
-	if(ret<0){
-		goto rw_end;
-	}                             
-	regmask = ~((1<<startBit) -1);                               
-	regmask &= ((1<<endBit) -1)|(1<<endBit);                     
-	uiRegValue &= ~regmask;                                      
-	uiRegValue |= (data <<startBit)&regmask;                     
-	ret = atbm_direct_write_reg_32(hw_priv,addr,uiRegValue);
-	if(ret<0)
-	{
-		goto rw_end;
-	}
-
-rw_end:
-	return ret;
-}  
 #if ATBM_READ_REG_TEST
 struct atbm_reg_bit_s
 {
@@ -365,8 +336,6 @@ exit:
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-extern void atbm_HwGetChipType(struct atbm_common *priv);
-
 int atbm_before_load_firmware(struct atbm_common *hw_priv)
 {
 	
@@ -378,7 +347,6 @@ int atbm_before_load_firmware(struct atbm_common *hw_priv)
 	u32 index;
 	u8 buffer[64];
 	#endif
-	atbm_HwGetChipType(hw_priv);
 #if (PROJ_TYPE>=ARES_A)
 	ret = atbm_direct_write_reg_32(hw_priv,0x0ae0000c,0x0);
         if(ret<0)
@@ -651,7 +619,7 @@ int atbm_after_load_firmware(struct atbm_common *hw_priv)
 
 void atbm_firmware_init_check(struct atbm_common *hw_priv)
 {
-	int status =0;	
+//	int status =0;	
 	struct sk_buff *skb = atbm_dev_alloc_skb(1600);
 	struct wsm_hdr_tx * hdr ;
 	
@@ -669,8 +637,8 @@ void atbm_firmware_init_check(struct atbm_common *hw_priv)
 	hw_priv->save_buf_vif_selected= -1;
 	//hw_priv->wsm_tx_seq = 0;
 	hw_priv->sbus_ops->lock(hw_priv->sbus_priv);
-	status = hw_priv->sbus_ops->sbus_memcpy_toio(hw_priv->sbus_priv,0x1,NULL,TX_BUFFER_SIZE);
-	atbm_printk_debug("%s : status [%d] \n",__func__,status);
+//	status = hw_priv->sbus_ops->sbus_memcpy_toio(hw_priv->sbus_priv,0x1,NULL,TX_BUFFER_SIZE);
+	hw_priv->sbus_ops->sbus_memcpy_toio(hw_priv->sbus_priv,0x1,NULL,TX_BUFFER_SIZE);
 	hw_priv->sbus_ops->unlock(hw_priv->sbus_priv);
 	hw_priv->save_buf = NULL;
 	//wait usb tx complete

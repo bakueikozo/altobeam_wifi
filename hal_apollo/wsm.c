@@ -29,8 +29,6 @@
 #include "mac80211/rc80211_minstrel.h"
 #include "mac80211/rc80211_minstrel_ht.h"
 
-
-
 #ifdef ATBM_SUPPORT_SMARTCONFIG
 extern int smartconfig_start_rx(struct atbm_common *hw_priv,struct sk_buff *skb,int channel );
 #endif
@@ -42,11 +40,11 @@ extern void etf_v2_scan_rx(struct atbm_common *hw_priv,struct sk_buff *skb,u8 rs
 #endif /*ROAM_OFFLOAD*/
 #endif
 //#define CONFIG_ATBM_APOLLO_WSM_DEBUG
-//#if defined(CONFIG_ATBM_APOLLO_WSM_DEBUG)
-//#define wsm_printk  printk
-//#else
-#define wsm_printk atbm_printk_wsm
-//#endif
+#if defined(CONFIG_ATBM_APOLLO_WSM_DEBUG)
+#define wsm_printk  printk
+#else
+#define wsm_printk(...)
+#endif
 extern int test_cnt_packet;
 
 #define WSM_CMD_TIMEOUT		(60 * HZ) /* With respect to interrupt loss */
@@ -174,60 +172,6 @@ void wsm_oper_unlock(struct atbm_common *hw_priv)
 	up(&hw_priv->wsm_oper_lock);
 	#endif
 }
-struct wsm_arg {
-	__le32 req_id;
-	void *buf;
-	size_t buf_size;
-};
-
-static int wsm_generic_req_confirm(struct atbm_common *hw_priv,
-				struct wsm_arg *arg,
-				struct wsm_buf *buf)
-{
-	u32 req_id = WSM_GET32(buf);
-	u32 status = WSM_GET32(buf);
-	
-	if(req_id != arg->req_id){
-		atbm_printk_err("%s:req_id[%d][%d] err\n",__func__,arg->req_id,req_id);
-		return -EINVAL;
-	}
-	
-	if(status != WSM_STATUS_SUCCESS){
-		atbm_printk_err("%s:status err[%d]\n",__func__,req_id);
-		return -EINVAL;
-	}
-	
-	WSM_GET(buf, arg->buf, arg->buf_size);
-
-	return 0;
-underflow:
-	WARN_ON(1);
-	return -EINVAL;
-}
-int wsm_generic_req(struct atbm_common *hw_priv,const struct wsm_gen_req *req,void *_buf,size_t buf_size,int if_id)
-{
-	
-	int ret;
-	struct wsm_buf *buf = &hw_priv->wsm_cmd_buf;
-	struct wsm_arg arg;
-	WARN_ON(req->req_len%4);
-	wsm_cmd_lock(hw_priv);
-	arg.req_id = req->req_id;
-	arg.buf    = _buf;
-	arg.buf_size = buf_size;
-	WSM_PUT32(buf, req->req_id);
-	WSM_PUT(buf, req->params, req->req_len);
-
-	ret = wsm_cmd_send(hw_priv, buf, &arg, WSM_GENERIC_REQ_ID, WSM_CMD_TIMEOUT, if_id);
-
-	wsm_cmd_unlock(hw_priv);
-	return ret;
-	
-	nomem:
-	wsm_cmd_unlock(hw_priv);
-	return -ENOMEM;
-}
-
 /* ******************************************************************** */
 /* WSM API implementation						*/
 
@@ -917,7 +861,7 @@ struct atbm_SdioCmd{
 #ifdef SDIO_BUS
 extern int atbm_data_force_write(struct atbm_common *hw_priv,u8* buf,int);
 //just ARESB have this function
-void wsm_sync_channl_reset(struct atbm_work_struct *work)
+void wsm_sync_channl_reset(struct work_struct *work)
 {
 	struct atbm_common *hw_priv =
 		container_of(work, struct atbm_common, wsm_sync_channl);	
@@ -1053,7 +997,7 @@ static int TRY_UP_LOCK(struct atbm_common *hw_priv)
 #endif
 	return 0;
 }
-void wsm_sync_channl(struct atbm_work_struct *work)
+void wsm_sync_channl(struct work_struct *work)
 {
 	int ret;
 	u16 reg;
@@ -1374,32 +1318,6 @@ underflow:
 }
 
 /* ******************************************************************** */
-				
-#ifdef CONFIG_RATE_TXPOWER
-				
-extern int get_rate_delta_gain(s8 *dst);
-int wsm_set_rate_power(struct atbm_common *hw_priv,int use_flag)
-{
-	s8 rate_txpower[23] = {0};//validfalg,data
-	int i,err;
-	if(get_rate_delta_gain(&rate_txpower[0]) ==  0){
-		for(i=22;i>11;i--)
-			rate_txpower[i] = rate_txpower[i-1];
-		rate_txpower[11] = use_flag;
-		{
-			if(hw_priv->wsm_caps.firmwareVersion > 12040)
-				err = wsm_write_mib(hw_priv, WSM_MIB_ID_SET_RATE_TX_POWER, rate_txpower, sizeof(rate_txpower), 0);
-			else
-				err = wsm_write_mib(hw_priv, WSM_MIB_ID_SET_RATE_TX_POWER, rate_txpower, 12, 0);
-			if(err < 0){
-				atbm_printk_err("write mib failed(%d). \n", err);
-			}
-		}
-		return 0;
-	}
-	return -1;
-}
-#endif
 
 static int wsm_join_confirm(struct atbm_common *hw_priv,
 			    struct wsm_join *arg,
@@ -1683,7 +1601,7 @@ static void atbm_pm_timer_setup(struct atbm_common *hw_priv)
 	#ifdef OPER_CLOCK_USE_SEM
 	spin_lock_bh(&hw_priv->wsm_pm_spin_lock);
 	atomic_set(&hw_priv->wsm_pm_running, 1);
-	atbm_mod_timer(&hw_priv->wsm_pm_timer,
+	mod_timer(&hw_priv->wsm_pm_timer,
 		jiffies + 2*HZ);
 	atbm_hold_suspend(hw_priv);
 	spin_unlock_bh(&hw_priv->wsm_pm_spin_lock);
@@ -1697,7 +1615,7 @@ static void atbm_pm_timer_cancle(struct atbm_common *hw_priv)
 	#ifdef OPER_CLOCK_USE_SEM
 	spin_lock_bh(&hw_priv->wsm_pm_spin_lock);
 	atomic_set(&hw_priv->wsm_pm_running, 0);	
-	atbm_del_timer(&hw_priv->wsm_pm_timer);	
+	del_timer(&hw_priv->wsm_pm_timer);	
 	atbm_release_suspend(hw_priv);
 	spin_unlock_bh(&hw_priv->wsm_pm_spin_lock);
 	#else
@@ -1728,9 +1646,7 @@ int wsm_set_pm(struct atbm_common *hw_priv, const struct wsm_set_pm *arg,
 	WSM_PUT8(buf, arg->fastPsmIdlePeriod);
 	WSM_PUT8(buf, arg->apPsmChangePeriod);
 	WSM_PUT8(buf, arg->minAutoPsPollPeriod);
-	atbm_printk_err("%s:pmMode:%d,fastPsmIdlePeriod:%d,apPsmChangePeriod:%d,minAutoPsPollPeriod:%d\n",
-				__func__,arg->pmMode,arg->fastPsmIdlePeriod,arg->apPsmChangePeriod,arg->minAutoPsPollPeriod);
-	
+
 	atbm_pm_timer_setup(hw_priv);
 	ret = wsm_cmd_send(hw_priv, buf, NULL, WSM_SET_PM_REQ_ID, WSM_CMD_TIMEOUT, if_id);
 
@@ -2024,7 +1940,6 @@ static int wsm_startup_indication(struct atbm_common *hw_priv,
 					struct wsm_buf *buf)
 {
 	u16 status;
-	u16 Resv;
 	char fw_label[129];
 	static const char * const fw_types[] = {
 		"ETF",
@@ -2054,15 +1969,6 @@ static int wsm_startup_indication(struct atbm_common *hw_priv,
 	Config[2]	= WSM_GET32(buf);
 	Config[3]	= WSM_GET32(buf);
 	firmwareCap2 =WSM_GET16(buf);
-	hw_priv->wsm_caps.firmeareExCap = 0;
-	if( buf->data + 2 <= buf->end ){
-		Resv = WSM_GET16(buf);
-		atbm_printk_debug("wsm_startup_indication : resv[%d] \n",Resv);
-	}
-	if( buf->data + 2 <= buf->end )
-		hw_priv->wsm_caps.firmeareExCap |= WSM_GET16(buf);
-	if( buf->data + 2 <= buf->end )
-		hw_priv->wsm_caps.firmeareExCap |= (WSM_GET16(buf)<<16);
 	hw_priv->wsm_caps.NumOfStations = Config[0] & 0x0000FFFF;
 	hw_priv->wsm_caps.NumOfInterfaces = (Config[0] & 0xFFFF0000) >> 16;
 	atbm_printk_init("firmwareCap2 %x\n",firmwareCap2);
@@ -2157,20 +2063,7 @@ static int wsm_startup_indication(struct atbm_common *hw_priv,
 #if (PROJ_TYPE>=ARES_B)
 	atbm_printk_init("CAPABILITIES_CFO_DCXO_CORRECTION  [%d]\n" ,!!(hw_priv->wsm_caps.firmwareCap &CAPABILITIES_CFO_DCXO_CORRECTION)		);
 #endif
-	atbm_printk_init("EX_CAPABILITIES_TWO_CHIP_ONE_SOC	[%d]",!!(hw_priv->wsm_caps.firmeareExCap & EX_CAPABILITIES_TWO_CHIP_ONE_SOC));
-	atbm_printk_init("EX_CAPABILITIES_MANUAL_SET_AC 	[%d]",!!(hw_priv->wsm_caps.firmeareExCap & EX_CAPABILITIES_MANUAL_SET_AC));
-	atbm_printk_init("EX_CAPABILITIES_LMAC_BW_CONTROL	[%d]",!!(hw_priv->wsm_caps.firmeareExCap & EX_CAPABILITIES_LMAC_BW_CONTROL));
-	atbm_printk_init("EX_CAPABILITIES_SUPPORT_TWO_ANTENNA	[%d]",!!(hw_priv->wsm_caps.firmeareExCap & EX_CAPABILITIES_SUPPORT_TWO_ANTENNA));
-	atbm_printk_init("EX_CAPABILITIES_ENABLE_STA_REMAIN_ON_CHANNEL	[%d]",!!(hw_priv->wsm_caps.firmeareExCap & EX_CAPABILITIES_ENABLE_STA_REMAIN_ON_CHANNEL));
-	atbm_printk_init("EX_CAPABILITIES_ENABLE_PS 	   [%d]",!!(hw_priv->wsm_caps.firmeareExCap & EX_CAPABILITIES_ENABLE_PS));
-	atbm_printk_init("EX_CAPABILITIES_TX_REQUEST_FIFO_LINK 	   [%d]",!!(hw_priv->wsm_caps.firmeareExCap & EX_CAPABILITIES_TX_REQUEST_FIFO_LINK));
 
-	if(1 == ((hw_priv->wsm_caps.firmeareExCap & EX_CAPABILITIES_CHIP_TYPE)>>7))
-		atbm_printk_init("EX_CAPABILITIES_CHIP_TYPE		6032IS\n");
-	else if(2 == ((hw_priv->wsm_caps.firmeareExCap & EX_CAPABILITIES_CHIP_TYPE)>>7))
-		atbm_printk_init("EX_CAPABILITIES_CHIP_TYPE		6032It\n");
-	else if(3 == ((hw_priv->wsm_caps.firmeareExCap & EX_CAPABILITIES_CHIP_TYPE)>>7))
-		atbm_printk_init("EX_CAPABILITIES_CHIP_TYPE		6012B\n");
 #ifdef CONFIG_TX_NO_CONFIRM
 	if((hw_priv->wsm_caps.firmwareCap &CAPABILITIES_NO_CONFIRM)==0){
 		
@@ -2269,8 +2162,7 @@ static int wsm_smartconfig_indication(struct atbm_common *hw_priv,
 	length_bak = (*skb_p)->len;
 	(*skb_p)->len = length;
 	data  = (*skb_p)->data;
-	atbm_printk_smt("chann=%d,channelType=%d,packNum=%d,rate=%d,len=%d,rx_status0_start=%d,mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
-		channelNum,channelType,packNum,rate,length,rx_status0_start,
+	atbm_printk_smt("chann=%d,packNum=%d,len=%d,mac=%02x:%02x:%02x:%02x:%02x:%02x\n",channelNum,packNum,length,
 		data[4],data[5],data[6],data[7],data[8],data[9]);
 	smartconfig_start_rx(hw_priv,*skb_p,channelNum);
 	if (*skb_p)
@@ -2487,36 +2379,21 @@ static int wsm_receive_indication(struct atbm_common *hw_priv,
 			if (priv->join_status == ATBM_APOLLO_JOIN_STATUS_STA) {
 				/* Shedule unjoin work */
 				bool do_unjoin = false;
-				bool report = false;
-
-				struct sta_info *mfp_sta = NULL;
 				atbm_printk_always("rx deauthen bssid[%pM],join_bssid[%pM]\n",hdr->addr3,priv->join_bssid);
     			if(memcmp(priv->join_bssid, hdr->addr3, ETH_ALEN) == 0){
 					do_unjoin = true;
 				}
-	
-				rcu_read_lock();
-				mfp_sta = (struct sta_info *)sta_info_get_rx(vif_to_sdata(priv->vif),hdr->addr2);
-				if(mfp_sta && test_sta_flag(mfp_sta, WLAN_STA_MFP) && !ieee80211_has_protected(hdr->frame_control)){
-					do_unjoin = false;
-					report = true;
-				}
-				rcu_read_unlock();
-
 				if(do_unjoin == true){
-					atbm_printk_err( \
+					wsm_printk( \
 						"[WSM] Issue unjoin command (RX).\n");
 						wsm_lock_tx_async(hw_priv);
 						if (atbm_hw_priv_queue_work(hw_priv,
 								&priv->unjoin_work) <= 0)
 							wsm_unlock_tx(hw_priv);
 				}else{
-					if(report == false){
-						atbm_priv_vif_list_read_unlock(&priv->vif_lock);
-						atbm_printk_err( "unknown bssid[%pM]\n",hdr->addr3);
-						
-						return 0;
-					}
+					atbm_priv_vif_list_read_unlock(&priv->vif_lock);
+					atbm_printk_err( "unknown bssid[%pM]\n",hdr->addr3);
+					return 0;
 				}
 			}
 		}
@@ -2617,7 +2494,7 @@ static int wsm_set_pm_indication(struct atbm_common *hw_priv,
 	spin_lock_bh(&hw_priv->wsm_pm_spin_lock);
 	if(atomic_read(&hw_priv->wsm_pm_running) == 1){
 		atomic_set(&hw_priv->wsm_pm_running, 0);
-		atbm_del_timer(&hw_priv->wsm_pm_timer);
+		del_timer(&hw_priv->wsm_pm_timer);
 		wsm_oper_unlock(hw_priv);
 		atbm_release_suspend(hw_priv);
 		atbm_printk_pm("[PM]:up pm lock\n");
@@ -2874,7 +2751,7 @@ int wsm_recovery_chip_ares(struct atbm_common *hw_priv)
 				hw_priv->hw_bufs_used = 0;
 			}
 			/* send the block to sram */
-			memset(buf,0,sizeof(buf));
+			memset(buf,0,DOWNLOAD_BLOCK_SIZE/4);
 			ret = atbm_ep0_write(hw_priv,addr,buf, tx_size);
 			if (ret < 0) {
 			        atbm_printk_err("%s:err\n",__func__);
@@ -2926,7 +2803,7 @@ int wsm_recovery(struct atbm_common *hw_priv)
 	}
 	//sync channle
 	hw_priv->syncChanl_done=0;
-	atbm_schedule_work(&hw_priv->wsm_sync_channl);
+	schedule_work(&hw_priv->wsm_sync_channl);
 	return RECOVERY_STEP2_SUCCESS;
 }
 int  wsm_recovery_done(struct atbm_common *hw_priv,int type)
@@ -3169,7 +3046,7 @@ TxCmdAgain:
 		//sync channle
 		wsm_lock_tx_async(hw_priv);
 		//Maybe atbm workqueue die,Here use linux default workqueue
-		atbm_schedule_work(&hw_priv->wsm_sync_channl);
+		schedule_work(&hw_priv->wsm_sync_channl);
 		wait_event_interruptible(hw_priv->wsm_synchanl_done,hw_priv->syncChanl_done);
 		{
 			atbm_printk_err("O'My GOD CMD TIMEOUT....Again\n");
@@ -3481,7 +3358,7 @@ int wsm_handle_exception(struct atbm_common *hw_priv, u8 *data, u32 len)
 	buf.end = &buf.begin[len];
 
 	reason = WSM_GET32(&buf);
-	atbm_printk_debug("wsm_handle_exception :reason[%d] \n ",reason);
+	atbm_printk_always("wsm_handle_exception()## reason = %d \n",reason);
 	for (i = 0; i < ARRAY_SIZE(reg); ++i)
 		reg[i] = WSM_GET32(&buf);
 	WSM_GET(&buf, fname, sizeof(fname));
@@ -3632,10 +3509,6 @@ int wsm_handle_rx(struct atbm_common *hw_priv, int id,
 				ret = wsm_write_shmem_confirm(hw_priv,
 									wsm_arg,
 									&wsm_buf);
-			break;
-		case WSM_GENERIC_RESP_ID:
-			if (likely(wsm_arg))
-				ret = wsm_generic_req_confirm(hw_priv, wsm_arg, &wsm_buf);
 			break;
 		case WSM_CONFIGURATION_RESP_ID:
 			/* Note that wsm_arg can be NULL in case of timeout in
@@ -3945,8 +3818,7 @@ static bool wsm_handle_tx_data(struct atbm_vif *priv,
 				*the current priv is not joined and in listenning mode,so we dont kown
 				*the channel.
 				*/
-				atbm_printk_err("drop offchannel pkg(%x)[%pM][%pM][%pM],bssid[%pM],if_id[%d],join_status[%d]\n",fctl,frame->addr1,
-				frame->addr2,frame->addr3,priv->join_bssid,priv->if_id,priv->join_status);
+				atbm_printk_err("drop offchannel pkg(%x)\n",fctl);
 				action = doDrop;
 			}
 		}
@@ -4007,10 +3879,7 @@ static bool wsm_handle_tx_data(struct atbm_vif *priv,
 			else if(priv->join_status == ATBM_APOLLO_JOIN_STATUS_STA_LISTEN)
 				action = doTx;
 #endif
-			else if(tx_info->flags & IEEE80211_TX_CTL_RATE_CTRL_PROBE){
-				atbm_printk_err("%s:send probe request\n",__func__);
-				action = doTx;
-			}else
+			else
 				action = doProbe;
 		} else if ((fctl & __cpu_to_le32(IEEE80211_FCTL_PROTECTED)) &&
 			tx_info->control.hw_key &&
@@ -4221,7 +4090,7 @@ static int atbm_get_prio_queue(struct atbm_vif *priv,
 	int winner = -1;
 	int queued;
 	int i;
-	urgent = BIT(atbm_dtim_virtual_linkid()) | BIT(atbm_uapsd_virtual_linkid());
+	urgent = BIT(priv->link_id_after_dtim) | BIT(priv->link_id_uapsd);
 
 	/* search for a winner using edca params */
 	for (i = 0; i < 4; ++i) {
@@ -4285,7 +4154,7 @@ static int wsm_get_tx_queue_and_mask(struct atbm_vif *priv,
 
 	/* Search for a queue with multicast frames buffered */
 	if (priv->tx_multicast) {
-		tx_allowed_mask = BIT(atbm_dtim_virtual_linkid());
+		tx_allowed_mask = BIT(priv->link_id_after_dtim);
 		idx = atbm_get_prio_queue(priv,
 				tx_allowed_mask, &total);
 		if (idx >= 0) {
@@ -4296,12 +4165,12 @@ static int wsm_get_tx_queue_and_mask(struct atbm_vif *priv,
 
 	/* Search for unicast traffic */
 	tx_allowed_mask = ~priv->sta_asleep_mask;
-	tx_allowed_mask |= BIT(atbm_uapsd_virtual_linkid());
+	tx_allowed_mask |= BIT(priv->link_id_uapsd);
 	if (priv->sta_asleep_mask) {
 		tx_allowed_mask |= priv->pspoll_mask;
-		tx_allowed_mask &= ~BIT(atbm_dtim_virtual_linkid());
+		tx_allowed_mask &= ~BIT(priv->link_id_after_dtim);
 	} else {
-		tx_allowed_mask |= BIT(atbm_dtim_virtual_linkid());
+		tx_allowed_mask |= BIT(priv->link_id_after_dtim);
 	}
 	idx = atbm_get_prio_queue(priv,
 			tx_allowed_mask, &total);

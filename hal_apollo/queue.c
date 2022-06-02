@@ -176,7 +176,7 @@ static void __atbm_queue_gc(struct atbm_queue *queue,
 				__atbm_queue_unlock(queue);
 		} else if (item) {
 			unsigned long tmo = item->queue_timestamp + queue->ttl;
-			atbm_mod_timer(&queue->gc, tmo);
+			mod_timer(&queue->gc, tmo);
 			#ifdef CONFIG_PM
 			atbm_pm_stay_awake(&stats->hw_priv->pm_state,
 					tmo - jiffies);
@@ -263,7 +263,7 @@ static void __atbm_queue_gc(struct atbm_queue *queue,
 		} else if (item) {
 			if(item->txpriv.if_id == if_id_clear){
 				unsigned long tmo = item->queue_timestamp + queue->ttl;
-				atbm_mod_timer(&queue->gc[if_id_clear], tmo);
+				mod_timer(&queue->gc[if_id_clear], tmo);
 				#ifdef CONFIG_PM
 				atbm_pm_stay_awake(&stats->hw_priv->pm_state,
 						tmo - jiffies);
@@ -333,12 +333,12 @@ int atbm_queue_init(struct atbm_queue *queue,
 	INIT_LIST_HEAD(&queue->free_pool);
 	spin_lock_init(&queue->lock);
 #ifndef	ATBM_WIFI_QUEUE_LOCK_BUG
-	atbm_init_timer(&queue->gc);
+	init_timer(&queue->gc);
 	queue->gc.data = (unsigned long)queue;
 	queue->gc.function = atbm_queue_gc;
 #else
 	for(i = 0;i<ATBM_WIFI_MAX_VIFS;i++){
-		atbm_init_timer(&queue->gc[i]);
+		init_timer(&queue->gc[i]);
 		queue->timer_to_if_id[i]=i;
 		queue->gc[i].data = (unsigned long)(&queue->timer_to_if_id[i]);
 		queue->gc[i].function = atbm_queue_gc;
@@ -472,10 +472,10 @@ void atbm_queue_deinit(struct atbm_queue *queue)
 
 	atbm_queue_clear(queue, ATBM_WIFI_ALL_IFS);
 #ifndef	ATBM_WIFI_QUEUE_LOCK_BUG
-	atbm_del_timer_sync(&queue->gc);
+	del_timer_sync(&queue->gc);
 #else
 	for (i = 0; i < ATBM_WIFI_MAX_VIFS; i++) {
-		atbm_del_timer_sync(&queue->gc[i]);
+		del_timer_sync(&queue->gc[i]);
 	}
 #endif
 	INIT_LIST_HEAD(&queue->free_pool);
@@ -608,7 +608,7 @@ int atbm_queue_put(struct atbm_queue *queue,
 				queue->num_queued >= (queue->capacity - (num_present_cpus()))) {
 			queue->overfull = true;
 			__atbm_queue_lock(queue);
-			atbm_mod_timer(&queue->gc, jiffies);
+			mod_timer(&queue->gc, jiffies);
 		}
 #else
 		{
@@ -629,7 +629,7 @@ int atbm_queue_put(struct atbm_queue *queue,
 				if(xIF_QUEUE_OVERFLOW(queue,txpriv->if_id,capacity) || ALLIF_QUEUE_OVERFLOW(queue)){
 					queue->overfull[txpriv->if_id] = true;
 					__atbm_queue_lock(queue,txpriv->if_id);
-					atbm_mod_timer(&queue->gc[txpriv->if_id], jiffies);
+					mod_timer(&queue->gc[txpriv->if_id], jiffies);
 
 				}
 			}else {

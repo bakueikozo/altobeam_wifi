@@ -24,8 +24,6 @@
 #include "rate.h"
 #include "mesh.h"
 #include "wext_cfg.h"
-#include "atbm_workqueue.h"
-
 #ifdef CONFIG_ATBM_SUPPORT_P2P
 #pragma message("Enable P2P Function")
 #else
@@ -60,9 +58,7 @@ ieee80211_add_iface(struct wiphy *wiphy,
 				unsigned char name_assign_type,
 				#endif
 			      enum nl80211_iftype type,
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(4, 15, 0))
 			      u32 *flags,
-#endif
 			      struct vif_params *params)
 {
 	struct ieee80211_local *local = wiphy_priv(wiphy);
@@ -70,9 +66,6 @@ ieee80211_add_iface(struct wiphy *wiphy,
 	struct ieee80211_sub_if_data *sdata;
 	int err;
 	u8  interface_cnt = 0;
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(4, 15, 0))
-	u32 *flags = params ? &params->flags : NULL ;
-#endif
 	
 	list_for_each_entry_rcu(sdata, &local->interfaces, list){
 		
@@ -144,17 +137,11 @@ static int ieee80211_del_iface(struct wiphy *wiphy,
 
 static int ieee80211_change_iface(struct wiphy *wiphy,
 				  struct net_device *dev,
-				  enum nl80211_iftype type,
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(4,15,0))
-				  u32 *flags,
-#endif
+				  enum nl80211_iftype type, u32 *flags,
 				  struct vif_params *params)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	int ret;
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(4,15,0))
-	u32 *flags = params ? &params->flags : NULL;
-#endif
 
 	ret = ieee80211_if_change_type(sdata, type);
 	if (ret)
@@ -212,11 +199,7 @@ int atbm_change_iface_to_monitor(struct net_device *dev)
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_hw *hw = &local->hw;
 	
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(4, 15, 0))
 	return ieee80211_change_iface(hw->wiphy, dev, NL80211_IFTYPE_MONITOR, NULL, NULL);
-#else
-	return ieee80211_change_iface(hw->wiphy, dev, NL80211_IFTYPE_MONITOR, NULL);
-#endif
 }
 
 static int ieee80211_add_key(struct wiphy *wiphy, struct net_device *dev,
@@ -237,10 +220,8 @@ static int ieee80211_add_key(struct wiphy *wiphy, struct net_device *dev,
 	case WLAN_CIPHER_SUITE_TKIP:
 	case WLAN_CIPHER_SUITE_WEP104:
 #ifdef CONFIG_ATBM_USE_SW_ENC
-#if (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 4, 0))
 		if (IS_ERR(sdata->local->wep_tx_tfm))
 			return -EINVAL;
-#endif
 #endif
 		break;
 	default:
@@ -1066,13 +1047,8 @@ static int ieee80211_start_ap(struct wiphy *wiphy, struct net_device *dev,
 	params.auth_type = settings->auth_type;
 	memcpy(&params.crypto,&settings->crypto,sizeof(struct cfg80211_crypto_settings));
 	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
-	#if (LINUX_VERSION_CODE <= KERNEL_VERSION(3, 7, 2))
-	chan = settings->channel;
-	chtype = settings->channel_type;
-	#else
 	chtype = cfg80211_get_chandef_type(&settings->chandef);
 	chan = settings->chandef.chan;
-	#endif
 	if(ieee80211_set_channel(wiphy,dev,chan,chtype))
 	{
 		atbm_printk_err("set channel err\n");
@@ -1391,7 +1367,7 @@ static int ieee80211_add_station(struct wiphy *wiphy, struct net_device *dev,
 }
 
 static int ieee80211_del_station(struct wiphy *wiphy, struct net_device *dev,
-				#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 31))
+				#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0))
 				u8 *mac
 				#elif (LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0))
 				const u8 *mac
@@ -1452,7 +1428,7 @@ static int ieee80211_del_station(struct wiphy *wiphy, struct net_device *dev,
 
 static int ieee80211_change_station(struct wiphy *wiphy,
 				    struct net_device *dev,
-				    #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 31))
+				    #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0))
 					u8 *mac,
 					#else
 					const u8 *mac,
@@ -2051,7 +2027,7 @@ int ieee80211_set_channel(struct wiphy *wiphy,
 
 	return ret;
 }
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
 static int ieee80211_set_monitor_channel(struct wiphy *wiphy,
 					 struct cfg80211_chan_def *chandef)
 {
@@ -2062,13 +2038,6 @@ static int ieee80211_set_monitor_channel(struct wiphy *wiphy,
 	 chan = chandef->chan;
 	 return ieee80211_set_channel(wiphy,NULL,chan,chtype);
 }
-#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
-static int ieee80211_set_monitor_channel(struct wiphy *wiphy,
-					 struct ieee80211_channel *chan,
-					 enum nl80211_channel_type channel_type)
-{
-	return ieee80211_set_channel(wiphy, NULL, chan, channel_type);
-}	
 #endif
 #ifdef CONFIG_PM
 static int ieee80211_suspend(struct wiphy *wiphy,
@@ -2106,10 +2075,6 @@ static int ieee80211_scan(struct wiphy *wiphy
 	if(atbm_ieee80211_suspend(sdata->local)==true){
 		
 		atbm_printk_err("ieee80211_scan drop:suspend\n");
-		return -EBUSY;
-	}
-	if(sdata->local->adaptive_started == true && time_is_after_jiffies(sdata->local->adaptive_started_time+(5*60*HZ))){
-		atbm_printk_err("%s:adaptive runing\n",__func__);
 		return -EBUSY;
 	}
 	switch (ieee80211_vif_type_p2p(&sdata->vif)) {
@@ -2326,9 +2291,9 @@ void ieee80211_ap_setchannel_fail(struct ieee80211_sub_if_data *ap_sdata,struct 
 
 }
 //send AP channel event , this is delay work ,because hostapd may have not been setup, we must wait it
-void ieee80211_ap_channel_event_work(struct atbm_work_struct *work)
+void ieee80211_ap_channel_event_work(struct work_struct *work)
 {
-	struct atbm_delayed_work *delayed_work = atbm_to_delayed_work(work);
+	struct delayed_work *delayed_work = to_delayed_work(work);
 	struct ieee80211_sub_if_data *sdata =container_of(delayed_work, struct ieee80211_sub_if_data, ap_channel_event_work);
 	//struct ieee80211_sub_if_data *sdata =
 	//	container_of(work, struct ieee80211_sub_if_data, ap_channel_event_work.work);
@@ -2416,9 +2381,9 @@ static int ieee80211_deauth(struct wiphy *wiphy, struct net_device *dev,
 			    #endif
 			    )
 {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) 
+	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)) 
 	void *cookie = dev->ieee80211_ptr;
-#endif
+	#endif
 	return ieee80211_mgd_deauth(IEEE80211_DEV_TO_SUB_IF(dev),
 				    req, cookie);
 }
@@ -2496,14 +2461,13 @@ static int ieee80211_set_wiphy_params(struct wiphy *wiphy,
 		return -EOPNOTSUPP;
 	}
 	#endif
-	atbm_printk_err("%s %d \n",__func__,__LINE__);
+	
 	if (changed & WIPHY_PARAM_FRAG_THRESHOLD) {
 		err = drv_set_frag_threshold(local, wiphy->frag_threshold);
 
 		if (err)
 			return err;
 	}
-	atbm_printk_err("%s %d \n",__func__,__LINE__);
 
 	if (changed & WIPHY_PARAM_COVERAGE_CLASS) {
 		err = drv_set_coverage_class(local, wiphy->coverage_class);
@@ -2511,7 +2475,6 @@ static int ieee80211_set_wiphy_params(struct wiphy *wiphy,
 		if (err)
 			return err;
 	}
-	atbm_printk_err("%s %d \n",__func__,__LINE__);
 
 	if (changed & WIPHY_PARAM_RTS_THRESHOLD) {
 		err = drv_set_rts_threshold(local, sdata,
@@ -2520,7 +2483,6 @@ static int ieee80211_set_wiphy_params(struct wiphy *wiphy,
 		if (err)
 			return err;
 	}
-	atbm_printk_err("%s %d \n",__func__,__LINE__);
 
 	if ((changed & WIPHY_PARAM_RETRY_SHORT) ||
 	    (changed & WIPHY_PARAM_RETRY_LONG)) {
@@ -2530,7 +2492,7 @@ static int ieee80211_set_wiphy_params(struct wiphy *wiphy,
 	}
 
 	drv_bss_info_changed(local, sdata, &sdata->vif.bss_conf, bss_changed);
-	atbm_printk_err("%s %d \n",__func__,__LINE__);
+	
 	return 0;
 }
 #ifdef CONFIG_ATBM_MAC80211_NO_USE
@@ -3002,7 +2964,7 @@ static int ieee80211_start_roc_work(struct ieee80211_local *local,
 	roc->frame = txskb;
 	roc->mgmt_tx_cookie = (unsigned long)txskb;
 	roc->sdata = sdata;
-	ATBM_INIT_DELAYED_WORK(&roc->work, ieee80211_sw_roc_work);
+	INIT_DELAYED_WORK(&roc->work, ieee80211_sw_roc_work);
 	INIT_LIST_HEAD(&roc->dependents);
 
 	/*
@@ -3133,9 +3095,7 @@ static int ieee80211_start_roc_work(struct ieee80211_local *local,
 			{
 				atbm_printk_cfg("%s:remain on channel time duration is not enough\n",__func__);
 			}
-		} 
-#ifdef CONFIG_ATBM_MAC80211_NO_USE
-		else if (atbm_del_timer_sync(&tmp->work.timer)) {
+		} else if (del_timer_sync(&tmp->work.timer)) {
 			unsigned long new_end;
 
 			/*
@@ -3153,13 +3113,12 @@ static int ieee80211_start_roc_work(struct ieee80211_local *local,
 
 			/* ok, it was started & we canceled timer */
 			if (time_after(new_end, tmp->work.timer.expires))
-				atbm_mod_timer(&tmp->work.timer, new_end);
+				mod_timer(&tmp->work.timer, new_end);
 			else
-				atbm_add_timer(&tmp->work.timer);
+				add_timer(&tmp->work.timer);
 
 			ieee80211_handle_roc_started(roc);
 		}
-#endif
 		break;
 	}
 
@@ -3241,7 +3200,7 @@ int ieee80211_start_pending_roc_work(struct ieee80211_local *local,
 	roc->sdata = sdata;
 	roc->cookie = *cookie;
 	
-	ATBM_INIT_DELAYED_WORK(&roc->work, ieee80211_sw_roc_work);
+	INIT_DELAYED_WORK(&roc->work, ieee80211_sw_roc_work);
 	INIT_LIST_HEAD(&roc->dependents);
 	
 	BUG_ON(local->scanning);
@@ -3277,22 +3236,22 @@ static int ieee80211_remain_on_channel(struct wiphy *wiphy,
 				       unsigned int duration,
 				       u64 *cookie)
 {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
+	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
 	struct net_device *dev = wdev_to_ndev(wdev);
-#endif
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0))
-    enum nl80211_channel_type channel_type = NL80211_CHAN_HT20;
-#endif
+	#endif
+	 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0))
+        enum nl80211_channel_type channel_type = NL80211_CHAN_HT20;
+       #endif
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_local *local = sdata->local;
-	int ret;
+		int ret;
 
-	mutex_lock(&local->mtx);
-	ret = ieee80211_start_roc_work(local, dev, sdata, chan, channel_type,
-			       duration, cookie, NULL);
-	mutex_unlock(&local->mtx);
+		mutex_lock(&local->mtx);
+		ret = ieee80211_start_roc_work(local, dev, sdata, chan, channel_type,
+				       duration, cookie, NULL);
+		mutex_unlock(&local->mtx);
 
-	return ret;
+		return ret;
 }
 
 static int ieee80211_cancel_roc(struct ieee80211_local *local,
@@ -3381,7 +3340,7 @@ static int ieee80211_cancel_roc(struct ieee80211_local *local,
 		mutex_unlock(&local->mtx);
 
 		/* work will clean up etc */
-		atbm_flush_delayed_work(&found->work);
+		flush_delayed_work(&found->work);
 	}
 
 	return 0;
@@ -3503,7 +3462,7 @@ static int ieee80211_mgmt_tx(struct wiphy *wiphy,
 	case NL80211_IFTYPE_MESH_POINT:
 #endif
 		if (!ieee80211_is_action(mgmt->frame_control) ||
-		    mgmt->u.action.category == ATBM_WLAN_CATEGORY_PUBLIC)
+		    mgmt->u.action.category == WLAN_CATEGORY_PUBLIC)
 			break;
 		rcu_read_lock();
 		sta = sta_info_get(sdata, mgmt->da);
@@ -3746,7 +3705,11 @@ ieee80211_prep_tdls_encap_data(struct wiphy *wiphy, struct net_device *dev,
 
 	switch (action_code) {
 	case WLAN_TDLS_SETUP_REQUEST:
-		tf->category = ATBM_WLAN_CATEGORY_TDLS;
+		#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0))
+		tf->category = 12;
+		#else
+		tf->category = WLAN_CATEGORY_TDLS;
+		#endif
 		tf->action_code = WLAN_TDLS_SETUP_REQUEST;
 
 		atbm_skb_put(skb, sizeof(tf->u.setup_req));
@@ -3759,7 +3722,11 @@ ieee80211_prep_tdls_encap_data(struct wiphy *wiphy, struct net_device *dev,
 		ieee80211_tdls_add_ext_capab(skb);
 		break;
 	case WLAN_TDLS_SETUP_RESPONSE:
-		tf->category = ATBM_WLAN_CATEGORY_TDLS;
+		#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0))
+		tf->category = 12;
+		#else
+		tf->category = WLAN_CATEGORY_TDLS;
+		#endif
 		tf->action_code = WLAN_TDLS_SETUP_RESPONSE;
 
 		atbm_skb_put(skb, sizeof(tf->u.setup_resp));
@@ -3773,7 +3740,11 @@ ieee80211_prep_tdls_encap_data(struct wiphy *wiphy, struct net_device *dev,
 		ieee80211_tdls_add_ext_capab(skb);
 		break;
 	case WLAN_TDLS_SETUP_CONFIRM:
-		tf->category = ATBM_WLAN_CATEGORY_TDLS;
+		#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0))
+		tf->category = 12;
+		#else
+		tf->category = WLAN_CATEGORY_TDLS;
+		#endif
 		tf->action_code = WLAN_TDLS_SETUP_CONFIRM;
 
 		atbm_skb_put(skb, sizeof(tf->u.setup_cfm));
@@ -3781,14 +3752,22 @@ ieee80211_prep_tdls_encap_data(struct wiphy *wiphy, struct net_device *dev,
 		tf->u.setup_cfm.dialog_token = dialog_token;
 		break;
 	case WLAN_TDLS_TEARDOWN:
-		tf->category = ATBM_WLAN_CATEGORY_TDLS;
+		#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0))
+		tf->category = 12;
+		#else
+		tf->category = WLAN_CATEGORY_TDLS;
+		#endif
 		tf->action_code = WLAN_TDLS_TEARDOWN;
 
 		atbm_skb_put(skb, sizeof(tf->u.teardown));
 		tf->u.teardown.reason_code = cpu_to_le16(status_code);
 		break;
 	case WLAN_TDLS_DISCOVERY_REQUEST:
-		tf->category = ATBM_WLAN_CATEGORY_TDLS;
+		#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0))
+		tf->category = 12;
+		#else
+		tf->category = WLAN_CATEGORY_TDLS;
+		#endif		
 		tf->action_code = WLAN_TDLS_DISCOVERY_REQUEST;
 
 		atbm_skb_put(skb, sizeof(tf->u.discover_req));
@@ -3838,7 +3817,7 @@ ieee80211_prep_tdls_direct(struct wiphy *wiphy, struct net_device *dev,
 		#else
 		atbm_skb_put(skb, 1 + sizeof(mgmt->u.action.u.tdls_discover_resp));
 		#endif
-		mgmt->u.action.category = ATBM_WLAN_CATEGORY_PUBLIC;
+		mgmt->u.action.category = WLAN_CATEGORY_PUBLIC;
 		#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0))
 		ptdls_discover_resp = (struct tdls_discover_resp_s *)(((u8 *)(&mgmt->u.action.category))+1);
 		ptdls_discover_resp->action_code = 14;
@@ -4151,9 +4130,7 @@ struct cfg80211_ops mac80211_config_ops = {
 #ifdef CONFIG_ATBM_SUPPORT_RCPI_RSSI
 	.set_cqm_rssi_config = ieee80211_set_cqm_rssi_config,
 #endif
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
 	.mgmt_frame_register = ieee80211_mgmt_frame_register,
-#endif
 //#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 25))
 #ifdef ATBM_POWERSAVE_SAVE_GROUP_KEY
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 0, 8))

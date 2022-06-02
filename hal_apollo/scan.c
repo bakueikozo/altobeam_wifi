@@ -119,7 +119,7 @@ static int atbm_disable_filtering(struct atbm_vif *priv)
 #endif
 
 #ifdef CONFIG_ATBM_SCAN_SPLIT
-void atbm_scan_split_work(struct atbm_work_struct *work)
+void atbm_scan_split_work(struct work_struct *work)
 {
 	struct atbm_common *hw_priv =
 		container_of(work, struct atbm_common, scan.scan_spilt.work);
@@ -175,7 +175,7 @@ static int atbm_scan_start(struct atbm_vif *priv, struct wsm_scan *scan)
 	if (unlikely(ret)) {
 		hw_priv->scan.wait_complete = 0;
 		atomic_set(&hw_priv->scan.in_progress, 0);
-		atbm_hw_cancel_delayed_work(&hw_priv->scan.timeout,true);
+		atbm_cancle_delayed_work(&hw_priv->scan.timeout,true);
 //		atbm_scan_restart_delayed(priv);
 	}
 	return ret;
@@ -231,7 +231,7 @@ int atbm_hw_scan(struct ieee80211_hw *hw,
 	roc_if_id = hw_priv->roc_if_id;
 	mutex_unlock(&hw_priv->conf_mutex);
 
-	if (atbm_work_pending(&priv->offchannel_work) ||
+	if (work_pending(&priv->offchannel_work) ||
 			(roc_if_id != -1)) {
 		atbm_printk_err( "[SCAN] Offchannel work pending,ignoring scan work %d\n",hw_priv->roc_if_id);
 		return -EBUSY;
@@ -249,8 +249,7 @@ int atbm_hw_scan(struct ieee80211_hw *hw,
 	}
 
 	frame.skb = ieee80211_probereq_get(hw, vif, NULL, 0,
-		req_wrap->req->ie, req_wrap->req->ie_len,
-		req_wrap->flags & IEEE80211_SCAN_REQ_NEED_BSSID ? req_wrap->bssid:NULL);
+		req_wrap->req->ie, req_wrap->req->ie_len);
 	if (!frame.skb)
 		return -ENOMEM;
 #ifdef CONFIG_ATBM_SUPPORT_P2P	
@@ -464,7 +463,7 @@ int atbm_hw_sched_scan_start(struct ieee80211_hw *hw,
 		return -EINVAL;
 
 	frame.skb = ieee80211_probereq_get(hw, priv->vif, NULL, 0,
-		ies->ie[0], ies->len[0],NULL);
+		ies->ie[0], ies->len[0]);
 	if (!frame.skb)
 		return -ENOMEM;
 
@@ -528,7 +527,7 @@ int atbm_hw_sched_scan_start(struct ieee80211_hw *hw,
 }
 #endif /*ROAM_OFFLOAD*/
 #endif
-void atbm_scan_work(struct atbm_work_struct *work)
+void atbm_scan_work(struct work_struct *work)
 {
 	struct atbm_common *hw_priv = container_of(work,
 						struct atbm_common,
@@ -583,7 +582,7 @@ void atbm_scan_work(struct atbm_work_struct *work)
 		/* Firmware gets crazy if scan request is sent
 		 * when STA is joined but not yet associated.
 		 * Force unjoin in this case. */
-		if (atbm_hw_cancel_delayed_work(&priv->join_timeout,true) > 0)
+		if (atbm_cancle_delayed_work(&priv->join_timeout,true) > 0)
 			atbm_join_timeout(&priv->join_timeout.work);
 	}
 
@@ -946,16 +945,24 @@ void atbm_scan_work(struct atbm_work_struct *work)
 				}
 				else {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
-					if (hw_priv->scan.req->no_cck)						
-						scan.ch[i].minChannelTime = 35;
-					else
+					if (hw_priv->scan.req->no_cck)	{
+					//	atbm_printk_err("%s()### 2\n",__func__);
+						//scan.ch[i].minChannelTime = 35;
+						scan.ch[i].minChannelTime = 50;
+					}else{
 #endif //#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
-						scan.ch[i].minChannelTime = 15;
-					scan.ch[i].maxChannelTime = maxChannelTime;
+						//scan.ch[i].minChannelTime = 15;
+						scan.ch[i].minChannelTime = 35;
+
+					//	atbm_printk_err("%s()### 3\n",__func__);
+					}
+					//scan.ch[i].maxChannelTime = maxChannelTime;
+					scan.ch[i].maxChannelTime = 110;
 				}
 				if(hw_priv->scan.cca == 1){
 					scan.ch[i].maxChannelTime = 500;
 				}
+				atbm_printk_err("%s()### scan.ch[%d].ChannelTime =[%d][%d]\n",__func__,scan.ch[i].number,scan.ch[i].minChannelTime,scan.ch[i].maxChannelTime);
 #ifdef CONFIG_ATBM_APOLLO_TESTMODE
 			}
 #endif
@@ -1056,7 +1063,7 @@ vif_err:
 }
 #ifdef CONFIG_ATBM_SUPPORT_SCHED_SCAN
 #ifdef ROAM_OFFLOAD
-void atbm_sched_scan_work(struct atbm_work_struct *work)
+void atbm_sched_scan_work(struct work_struct *work)
 {
 	struct atbm_common *hw_priv = container_of(work, struct atbm_common,
 		scan.swork);
@@ -1075,7 +1082,7 @@ void atbm_sched_scan_work(struct atbm_work_struct *work)
 	/* Firmware gets crazy if scan request is sent
 	 * when STA is joined but not yet associated.
 	 * Force unjoin in this case. */
-	if (atbm_hw_cancel_delayed_work(&priv->join_timeout,true) > 0) {
+	if (atbm_cancle_delayed_work(&priv->join_timeout,true) > 0) {
 		atbm_join_timeout(&priv->join_timeout.work);
 	}
 	mutex_lock(&hw_priv->conf_mutex);
@@ -1186,7 +1193,7 @@ static void atbm_scan_restart_delayed(struct atbm_vif *priv)
 			spin_lock_bh(&priv_delay->bss_loss_lock);
 			priv_delay->bss_loss_status = ATBM_APOLLO_BSS_LOSS_NONE;
 			spin_unlock_bh(&priv_delay->bss_loss_lock);
-			atbm_hw_cancel_delayed_work(&priv_delay->bss_loss_work,false);
+			atbm_cancle_delayed_work(&priv_delay->bss_loss_work,false);
 			atbm_hw_priv_queue_delayed_work(hw_priv,
 					&priv_delay->bss_loss_work,
 					tmo * HZ / 10);
@@ -1295,7 +1302,7 @@ void atbm_scan_complete_cb(struct atbm_common *hw_priv,
 	if(hw_priv->scan.status == -ETIMEDOUT)
 		atbm_printk_warn("Scan timeout already occured. Don't cancel work");
 	if ((hw_priv->scan.status != -ETIMEDOUT) &&
-		(atbm_hw_cancel_delayed_work(&hw_priv->scan.timeout,false/*can't set to true,because this function is call in bh, must not wait in bh */) > 0)) {
+		(atbm_cancle_delayed_work(&hw_priv->scan.timeout,false/*can't set to true,because this function is call in bh, must not wait in bh */) > 0)) {
 		hw_priv->scan.status = 1;
 		if(hw_priv->scan.cca){
 			struct ieee80211_internal_scan_notity notify;
@@ -1320,7 +1327,7 @@ void atbm_scan_complete_cb(struct atbm_common *hw_priv,
 //#ifdef CONFIG_WIRELESS_EXT
 extern int wsm_start_scan_etf(struct atbm_common *hw_priv, struct ieee80211_vif *vif );
 
-void etf_scan_end_work(struct atbm_work_struct *work)
+void etf_scan_end_work(struct work_struct *work)
 {
 	struct atbm_common *hw_priv =
 		container_of(work, struct atbm_common, etf_tx_end_work);
@@ -1331,7 +1338,7 @@ void etf_scan_end_work(struct atbm_work_struct *work)
 	etf_v2_scan_end(hw_priv,priv->vif);
 }
 //#endif  //CONFIG_WIRELESS_EXT
-void atbm_scan_timeout(struct atbm_work_struct *work)
+void atbm_scan_timeout(struct work_struct *work)
 {
 	struct atbm_common *hw_priv =
 		container_of(work, struct atbm_common, scan.timeout.work);
@@ -1391,7 +1398,7 @@ void atbm_scan_timeout(struct atbm_work_struct *work)
 }
 
 #ifdef CONFIG_ATBM_APOLLO_TESTMODE
-void atbm_advance_scan_timeout(struct atbm_work_struct *work)
+void atbm_advance_scan_timeout(struct work_struct *work)
 {
 	struct atbm_common *hw_priv =
 		container_of(work, struct atbm_common, advance_scan_timeout.work);
@@ -1431,7 +1438,7 @@ void atbm_advance_scan_timeout(struct atbm_work_struct *work)
 }
 #endif
 
-void atbm_probe_work(struct atbm_work_struct *work)
+void atbm_probe_work(struct work_struct *work)
 {
 	struct atbm_common *hw_priv =
 		container_of(work, struct atbm_common, scan.probe_work.work);

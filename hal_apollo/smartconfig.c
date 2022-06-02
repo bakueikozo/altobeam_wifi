@@ -50,7 +50,7 @@ int atbm_smart_scan_start(struct atbm_vif *priv, struct wsm_scan *scan)
         }
         return ret;
 }
-void atbm_smart_scan_work(struct atbm_work_struct *work)
+void atbm_smart_scan_work(struct work_struct *work)
 {
 	struct atbm_common *hw_priv = container_of(work,
                                                 struct atbm_common,
@@ -137,7 +137,7 @@ fail:
         atbm_hw_priv_queue_work(hw_priv, &hw_priv->scan.smartwork);
         return ;
 }
-void atbm_smart_setchan_work(struct atbm_work_struct *work)
+void atbm_smart_setchan_work(struct work_struct *work)
 {	
 	struct atbm_common *hw_priv = container_of(work,
                                                 struct atbm_common, 
@@ -153,7 +153,7 @@ void atbm_smart_setchan_work(struct atbm_work_struct *work)
 }
 
 
-void atbm_smart_stop_work(struct atbm_work_struct *work)
+void atbm_smart_stop_work(struct work_struct *work)
 {
 	struct atbm_common *hw_priv = container_of(work,
                                                 struct atbm_common, 
@@ -165,7 +165,7 @@ void atbm_smart_stop_work(struct atbm_work_struct *work)
 	hw_priv->st_status = CONFIG_ST_IDLE;
 	hw_priv->scan.scan_smartconfig = 0;
 	reset.reset_statistics = true;
-	atbm_del_timer_sync(&hw_priv->smartconfig_expire_timer);  
+	del_timer_sync(&hw_priv->smartconfig_expire_timer);  
 	if(st_payload_buf){
 		 atbm_kfree(st_payload_buf);
 		 st_payload_buf= NULL;
@@ -226,7 +226,7 @@ int smartconfig_start(struct atbm_common *hw_priv,struct smartconfig_config * st
 	 memcpy(&hw_priv->st_cfg,st_cfg,sizeof(struct smartconfig_config ));
 	 /*disconnect AP*/
 	// AT_WDisConnect(NULL);
-	 atbm_mod_timer(&hw_priv->smartconfig_expire_timer,st_cfg->payload_time + st_cfg->magic_time*14);
+	 mod_timer(&hw_priv->smartconfig_expire_timer,st_cfg->payload_time + st_cfg->magic_time*14);
 	 atbm_printk_err("st_cfg->payload_time + st_cfg->magic_time*14 = %d\n", (st_cfg->payload_time + st_cfg->magic_time*14));
 	 if(hw_priv->scan_ret.info){
 		spin_lock_bh(&hw_priv->spinlock_smart);
@@ -519,6 +519,7 @@ int start_connect_ap(struct atbm_vif*priv,u8 *essid,int essid_len,u8 *key,int ke
 	}
 	if (config->key_mgmt & WPA_KEY_MGMT_PSK) {
 		
+		//计算PMK
 		//pbkdf2_sha1((const char*)ssid->psk, (const char*)ssid->ssid, ssid->ssid_len, 8, wpa_s->wpa->pmksa[0].id, PMKID_LEN);
 		config->psk_set = 0;
 		if(config->psk_set){
@@ -531,6 +532,12 @@ int start_connect_ap(struct atbm_vif*priv,u8 *essid,int essid_len,u8 *key,int ke
 		config->psk_set = 1;
 	}
 	
+	/*
+	**********************************
+	启动scannng流程，侦听beacon
+	或发送probe
+	**********************************
+	*/
 	smartconfig_scan(priv);
 	//os_free(priv->extra_ie);
 	priv->extra_ie = NULL;

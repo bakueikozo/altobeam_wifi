@@ -20,12 +20,7 @@
         -include $(shell pwd)/../include/linux/compat-2.6.h \
         -DCOMPAT_STATIC
 ##指定配置文件路径，当配置文件存在时使用配置文件中的dcxo值不使用efuse中的dcxo，配置文件中的delta_gain为修正值，如果文件不存在则直接使用efuse中的数据
-ATBM_CONFIG_FILE="/tmp/atbm_txpwer_dcxo_cfg.txt"
-ccflags-y += -DCONFIG_TXPOWER_DCXO_VALUE=\"$(ATBM_CONFIG_FILE)\"
-# use the deltagain value in file :"$(ATBM_CONFIG_FILE)",when file exist
-ATBM_RATE_POWER_CONFIG_FILE="/tmp/set_rate_power.txt"
-ccflags-y += -DCONFIG_RATE_TXPOWER=\"$(ATBM_RATE_POWER_CONFIG_FILE)\"
-
+ATBM_CONFIG_FILE="/atbm_txpwer_dcxo_cfg.txt"
 ifneq ($(IF1NAME),)
 ccflags-y += -DCONFIG_IF1NAME=\"$(IF1NAME)\"
 endif
@@ -38,14 +33,6 @@ endif
 ifneq ($(USBPID),)
 ccflags-y += -DCONFIG_USBPID=$(USBPID)
 endif
-ifneq ($(SDIOVID),)
-ccflags-y += -DCONFIG_SDIOVID=$(SDIOVID)
-endif
-ifneq ($(SDIOPID),)
-ccflags-y += -DCONFIG_SDIOPID=$(SDIOPID)
-endif
-
-
 ifneq ($(MODDRVNAME),)
 ccflags-y += -DCONFIG_MODDRVNAME=\"$(MODDRVNAME)\"
 endif
@@ -73,7 +60,6 @@ ccflags-y += -DMINSTREL_RSSI_USED
 ccflags-y += -DATBM_P2P_ADDR_USE_LOCAL_BIT
 ccflags-y += -DATBM_WIFI_QUEUE_LOCK_BUG
 ccflags-y += -DATBM_CHANGE_AP_TIMESTAMP_TO_BOOTTIME
-ccflags-y += -DATBM_FUNCTION
 #ccflags-y += -DATBM_USE_SAVED_FW
 #ccflags-y += -DATBM_AP_SME
 #ccflags-y += -DP2P_MULTIVIF
@@ -93,7 +79,7 @@ ccflags-y += -DCONFIG_ATBM_SUPPORT_SG
 #ccflags-y += -DCONFIG_ATBM_SUPPORT_COUNTRY_CODE
 #add AP+STA mode , sta channel change send event to hostapd
 ccflags-y += -DCONFIG_ATBM_AP_CHANNEL_CHANGE_EVENT
-#ccflags-y += -DCONFIG_ATBM_SELF_WORKQUEUE
+
 ifeq ($(platform),PLATFORM_AMLOGIC_S805)
 ccflags-y += -DCONFIG_ATBM_APOLLO_USE_GPIO_IRQ
 endif
@@ -104,9 +90,6 @@ endif
 #Select GPIO23 or GPIO1 use for sdio irq
 #ccflags-y += -DUSE_GPIO_23=1
 ccflags-y += -DUSE_GPIO_1=1
-
-#ccflags-y += -DCONFIG_ATBM_GET_GPIO4
-
 #ccflags-y += -DATBM_PKG_REORDER
 ccflags-y += -DATBM_SUPPORT_WIDTH_40M
 #ccflags-y += -DIPC_AP_USED_11G_NO_RTS
@@ -127,29 +110,6 @@ ccflags-y += -DWIFI_FW_DOWNLOAD
 ccflags-y += -DATBM_PROBE_RESP_EXTRA_IE
 #ccflags-y += -DCONFIG_ATBM_APOLLO_DEBUG
 #ccflags-y += -DCONFIG_ATBM_STA_LISTEN
-#ccflags-y += -DCONFIG_ATBM_SA_QUERY
-
-
-ccflags-y += -DCONFIG_ATBM_IWPRIV_USELESS
-ccflags-y += -DCONFIG_ATBM_SUPPORT_AP_CONFIG
-#ccflags-y += -DCONFIG_ATBM_STA_DYNAMIC_PS
-ccflags-y += -DCONFIG_ATBM_SUPPORT_REALTIME_CHANGE_MAC
-ccflags-y += -DCONFIG_LMAC_RATECTRL_RATE_BUG_FIX
-###################################################################
-#used scond interface p2p0
-###################################################################
-ifeq ($(NEED_SCOND_INTERFACE),y)
-ccflags-y += -DNEED_P2P0_INTERFACE=1
-else
-ccflags-y += -DNEED_P2P0_INTERFACE=0
-endif
-
-###################################################################
-#One driver supports both 6012B and 6032ix
-###################################################################
-ifeq ($(CONFIG_6012B),y)
-ccflags-y += -DSUPPORT_ATBM6012B
-endif
 ###################################################################
 #monitor hdr prism
 ###################################################################
@@ -163,9 +123,9 @@ ccflags-$(DRVLOADERFAST) += -DCONDIF_ATBM_CTRL_REQUEST_ASYNC
 #private protocl 
 ################################################################### 
 ccflags-$(PRI_IE) += -DATBM_PRIVATE_IE
-#ifneq ($(PRI_IE),y)
+ifneq ($(PRI_IE),y)
 ccflags-y += -DCONFIG_ATBM_STA_LISTEN
-#endif
+endif
 ###################################################################
 #ATBM_SUSPEND_REMOVE_INTERFACE
 #before enter suspend state ,remove all interface
@@ -195,9 +155,7 @@ ccflags-$(LOAD_FW_H) += -DCONFIG_USE_FW_H
 #ATBM_NOT_SUPPORT_40M_CHW
 #only support 20m channel
 ####################################################################
-#CONFIG_NOT_SUPPORT_40M_CHW=$(ONLY_HT20)
-#ccflags-$(CONFIG_NOT_SUPPORT_40M_CHW) += -DATBM_NOT_SUPPORT_40M_CHW
-ccflags-$(ONLY_HT20) += -DATBM_NOT_SUPPORT_40M_CHW
+ccflags-$(CONFIG_NOT_SUPPORT_40M_CHW) += -DATBM_NOT_SUPPORT_40M_CHW
 ####################################################################
 #ATBM_SUPPORT_PKG_MONITOR
 #monitor funciton
@@ -277,11 +235,6 @@ ccflags-$(SMARTCONFIG) += -DATBM_SUPPORT_SMARTCONFIG
 ccflags-$(SPECTRUMMGMT) += -DCONFIG_ATBM_SPECTRUM_MGMT
 ####################################################################
 ccflags-$(CUSTORMSPECIAL) += -DCONFIG_IEEE80211_SPECIAL_FILTER
-####################################################################
-#SAE authen for wpa3
-#
-####################################################################
-ccflags-$(SAEAUTHEN) += -DCONFIG_ATBM_SUPPORT_SAE
 #CONFIG_ATBM_PRODUCT_TEST_USE_GOLDEN_LED
 #wifi product  test use Golden LED
 ####################################################################
@@ -298,8 +251,6 @@ ccflags-y += -DATBM_PRODUCT_TEST_USE_FEATURE_ID
 #if need this feature
 ####################################################################
 #ccflags-y += -DSIGMSTAR_SCAN_FEATURE
-
-
 #ccflags-y += -DIPV6_FILTERING
 #ccflags-y += -DCONFIG_ATBM_APOLLO_BH_DEBUG
 #ccflags-y += -DCONFIG_ATBM_APOLLO_WSM_DEBUG
@@ -317,9 +268,8 @@ ccflags-y += -DCUSTOM_FEATURE_MAC
 #ccflags-y += -DUSB_CMD_UES_EP0
 #ccflags-y += -DRESET_CHANGE
 #ccflags-y += -DCONFIG_ATBMWIFI_WDT
-#ccflags-y += -DCONFIG_ATBM_ALIGNED_ACCESS
-
-
+# use the txpower and dcxo value in file :"$(ATBM_CONFIG_FILE)",when file exist
+ccflags-y += -DCONFIG_TXPOWER_DCXO_VALUE=\"$(ATBM_CONFIG_FILE)\"
 #PLATFORM_XUNWEI
 #PLATFORM_SUN6I
 #PLATFORM_FRIENDLY
@@ -441,7 +391,7 @@ ifeq ($(USB_BUS),y)
 ccflags-y += -DUSB_BUS
 ccflags-y += -DUSB_USE_TASTLET_TXRX
 ccflags-y += -DUSB_BUS_BUG
-#ccflags-y += -DCONFIG_USB_URB_RX_SUBMIT_DIRECTLY
+ccflags-y += -DCONFIG_USB_URB_RX_SUBMIT_DIRECTLY
 #ccflags-y += -DCONFIG_WSM_CMD_XMIT_DIRECTLY
 #ccflags-y += -DCONFIG_USB_DATA_XMIT_DIRECTLY
 #ccflags-y += -DCONFIG_USE_DMA_ADDR_BUFFER
@@ -463,7 +413,6 @@ ccflags-y += -DRESET_CHANGE
 ccflags-y += -DSDIO_BUS
 #ccflags-y += -DCONFIG_SDIO_IRQ_THREAD_PROCESS_DATA
 ccflags-y += -DCONFIG_ATBM_SDIO_TX_HOLD
-ccflags-y += -DCONFIG_ATBM_SDIO_TX_THREAD_FIFO
 #ccflags-y += -DCONFIG_SDIO_TXRX_WORKQUEUE
 #ccflags-y += -DATBM_SDIO_TXRX_ENHANCE
 #ccflags-y += -DATBM_WSM_SDIO_TX_MULT
@@ -518,8 +467,7 @@ $(ATBM_MODULES_NAME)-y := \
         mac80211/util.o \
         mac80211/wme.o \
         mac80211/chan.o \
-	mac80211/wext_cfg.o		\
-	mac80211/atbm_workqueue.o
+	mac80211/wext_cfg.o
 
 $(ATBM_MODULES_NAME)-$(SWENC) += \
         mac80211/wep.o \

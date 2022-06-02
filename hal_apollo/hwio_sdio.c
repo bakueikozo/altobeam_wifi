@@ -140,7 +140,7 @@ static int __atbm_data_write(struct atbm_common *hw_priv, u16 addr,
 static inline int __atbm_reg_read_32(struct atbm_common *hw_priv,
 					u16 addr, u32 *val)
 {
-	return __atbm_reg_read(hw_priv, addr, val, 4);
+	return __atbm_reg_read(hw_priv, addr, val, sizeof(val));
 }
 
 static inline int __atbm_reg_write_32(struct atbm_common *hw_priv,
@@ -971,30 +971,6 @@ int atbm_before_load_firmware(struct atbm_common *hw_priv)
 	if(ret<0)
 		atbm_printk_err("write 0xacc0178 err\n");
 #endif
-
-{
-	/*
-		not reset wifi , insmod wifi success
-	*/
-	ret = atbm_direct_read_reg_32(hw_priv,0xab0016c,&val32);
-	if(ret<0)
-		atbm_printk_err("read 0xab0016c err\n");
-	atbm_printk_err("%s:0xab0016c = [%x]\n",__func__,val32);
-	val32 |= BIT(0);
-	ret = atbm_direct_write_reg_32(hw_priv,0xab0016c,val32);
-	if(ret<0)
-		atbm_printk_err("write 0xab0016c err\n");
-	
-	ret = atbm_direct_read_reg_32(hw_priv,0xab0016c,&val32);
-	if(ret<0)
-		atbm_printk_err("read 0xab0016c err\n");
-	atbm_printk_err("%s:0xab0016c = [%x]\n",__func__,val32);
-	val32 &= ~BIT(0);
-	ret = atbm_direct_write_reg_32(hw_priv,0xab0016c,val32);
-	if(ret<0)
-		atbm_printk_err("write 0xab0016c err\n");
-}
-
 retry:
 	/* Read CONFIG Register Value - We will read 32 bits */
 	ret = atbm_reg_read_32(hw_priv, ATBM_HIFREG_CONFIG_REG_ID, &val32);
@@ -1170,19 +1146,17 @@ out:
 		goto retry;
 	}
 #if (DPLL_CLOCK == DPLL_CLOCK_24M)
-#if (PROJ_TYPE<=ARES_B)
 	{
 		u32 reset_reg = 0;
 		#pragma message("add delay before load fw")
-		mdelay(1);
+		mdelay(100);
 		ret = atbm_direct_read_reg_32(hw_priv,0x16100074,&reset_reg);
 		atbm_printk_err("%s:read [0x16100074]=[%x],ret(%d)\n",__func__,reset_reg,ret);
 		reset_reg |= BIT(0);
 		ret = atbm_direct_write_reg_32(hw_priv,0x16100074,reset_reg);		
 		atbm_printk_err("%s:write [0x16100074]=[%x],ret(%d)\n",__func__,reset_reg,ret);
-		mdelay(1);
+		mdelay(100);
 	}
-#endif 
 #endif
 	return ret;
 }
@@ -1270,7 +1244,7 @@ int atbm_after_load_firmware(struct atbm_common *hw_priv)
 			goto out;
 		}
 #endif
-#ifdef USE_GPIO_23
+#if USE_GPIO_23
 		/*use GPIO23 for sdio irq*/
 		ret=atbm_ahb_read_32(hw_priv,0x17400000,&val32);
 		val32|=BIT(1);
@@ -1281,9 +1255,7 @@ int atbm_after_load_firmware(struct atbm_common *hw_priv)
 		val32&=~(BIT(19)|BIT(18)|BIT(17)|BIT(16));
 		val32|=BIT(19);
 		ret=atbm_ahb_write_32(hw_priv,0x17400030,val32);
-#endif
-
-#ifdef USE_GPIO_1
+#elif USE_GPIO_1
 		/*use GPIO1 for sdio irq*/
 		ret=atbm_ahb_read_32(hw_priv,0x17400000,&val32);
 		val32&=~BIT(1);

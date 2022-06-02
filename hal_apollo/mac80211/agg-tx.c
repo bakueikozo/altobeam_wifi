@@ -88,7 +88,7 @@ static void ieee80211_send_addba_request(struct ieee80211_sub_if_data *sdata,
 
 	atbm_skb_put(skb, 1 + sizeof(mgmt->u.action.u.addba_req));
 
-	mgmt->u.action.category = ATBM_WLAN_CATEGORY_BACK;
+	mgmt->u.action.category = WLAN_CATEGORY_BACK;
 	mgmt->u.action.u.addba_req.action_code = WLAN_ACTION_ADDBA_REQ;
 
 	mgmt->u.action.u.addba_req.dialog_token = dialog_token;
@@ -198,7 +198,7 @@ int ___ieee80211_stop_tx_ba_session(struct sta_info *sta, u16 tid,
 	       sta->sta.addr, tid);
 #endif /* CONFIG_MAC80211_ATBM_HT_DEBUG */
 
-	atbm_del_timer_sync(&tid_tx->addba_resp_timer);
+	del_timer_sync(&tid_tx->addba_resp_timer);
 
 	/*
 	 * After this packets are no longer handed right through
@@ -398,7 +398,7 @@ void ieee80211_tx_ba_session_handle_start(struct sta_info *sta, int tid)
 	}
 
 	/* activate the timer for the recipient's addBA response */
-	atbm_mod_timer(&tid_tx->addba_resp_timer, jiffies + ADDBA_RESP_INTERVAL);
+	mod_timer(&tid_tx->addba_resp_timer, jiffies + ADDBA_RESP_INTERVAL);
 #ifdef CONFIG_MAC80211_ATBM_HT_DEBUG
 	atbm_printk_agg( "activated addBA response timer on tid %d\n", tid);
 #endif
@@ -491,7 +491,7 @@ int ieee80211_start_tx_ba_session(struct ieee80211_sta *pubsta, u16 tid,
 	/* Tx timer */
 	tid_tx->addba_resp_timer.function = sta_addba_resp_timer_expired;
 	tid_tx->addba_resp_timer.data = (unsigned long)&sta->timer_to_tid[tid];
-	atbm_init_timer(&tid_tx->addba_resp_timer);
+	init_timer(&tid_tx->addba_resp_timer);
 
 	/* assign a dialog token */
 	sta->ampdu_mlme.dialog_token_allocator++;
@@ -794,7 +794,7 @@ void ieee80211_process_addba_resp(struct ieee80211_local *local,
 		goto out;
 	}
 
-	atbm_del_timer_sync(&tid_tx->addba_resp_timer);
+	del_timer_sync(&tid_tx->addba_resp_timer);
 
 #ifdef CONFIG_MAC80211_ATBM_HT_DEBUG
 	atbm_printk_agg("switched off addBA timer for tid %d\n", tid);

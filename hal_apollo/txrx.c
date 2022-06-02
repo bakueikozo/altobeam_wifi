@@ -119,7 +119,7 @@ void atbm_tx_udp(struct ieee80211_hw *dev,struct sk_buff *skb)
 				atbm_printk_rx("start atbm_hw_priv_queue_delayed_work\n");
 			}
 			else {
-				atbm_hw_cancel_delayed_work(&priv->dhcp_retry_work,false);
+				atbm_cancle_delayed_work(&priv->dhcp_retry_work,false);
 			}
 			spin_unlock_bh(&priv->dhcp_retry_spinlock);
 			//dhcp_hexdump("Tx Dhcp ",(u8*)skb->data,skb->len);
@@ -219,7 +219,7 @@ void atbm_rx_udp(struct atbm_vif *priv,struct sk_buff *skb)
 			if(IS_BOOTP_PORT(ntohs(udph->source),ntohs(udph->dest)))
 			{
 				atbm_printk_rx("cancel dhcp_retry_work\n");
-				atbm_hw_cancel_delayed_work(&priv->dhcp_retry_work,false);
+				atbm_cancle_delayed_work(&priv->dhcp_retry_work,false);
 				
 				//dhcp_hexdump("Rx Dhcp ",(u8*)udph+236+8,16);
 			}
@@ -228,7 +228,7 @@ void atbm_rx_udp(struct atbm_vif *priv,struct sk_buff *skb)
 }
 void __atbm_tx(struct ieee80211_hw *dev, struct sk_buff *skb);
 
-void atbm_dhcp_retry_work(struct atbm_work_struct *work)
+void atbm_dhcp_retry_work(struct work_struct *work)
 {	
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, dhcp_retry_work.work);
@@ -637,7 +637,7 @@ static int tx_policy_upload(struct atbm_common *hw_priv)
 	/*TODO: COMBO*/
 	return wsm_set_tx_rate_retry_policy(hw_priv, &arg, if_id);
 }
-void tx_policy_upload_work(struct atbm_work_struct *work)
+void tx_policy_upload_work(struct work_struct *work)
 {
 	struct atbm_common *hw_priv =
 		container_of(work, struct atbm_common, tx_policy_upload_work);
@@ -741,7 +741,7 @@ atbm_tx_h_calc_link_ids(struct atbm_vif *priv,
 	else if (is_multicast_ether_addr(t->da)) {
 		if (priv->enable_beacon) {
 			t->txpriv.raw_link_id = 0;
-			t->txpriv.link_id = atbm_dtim_virtual_linkid();
+			t->txpriv.link_id = priv->link_id_after_dtim;
 		} else {
 			t->txpriv.raw_link_id = 0;
 			t->txpriv.link_id = 0;
@@ -755,10 +755,7 @@ atbm_tx_h_calc_link_ids(struct atbm_vif *priv,
 			(ieee80211_is_deauth(t->hdr->frame_control) ||
 			ieee80211_is_disassoc(t->hdr->frame_control) ||
 			ieee80211_is_probe_resp(t->hdr->frame_control) ||
-			ieee80211_is_action(t->hdr->frame_control) ||
-			ieee80211_is_auth(t->hdr->frame_control) ||
-			ieee80211_is_assoc_resp(t->hdr->frame_control) ||
-			ieee80211_is_reassoc_resp(t->hdr->frame_control))) {
+			ieee80211_is_action(t->hdr->frame_control))) {
 			t->txpriv.link_id = 0;
 			atbm_printk_debug("%s:send no id\n",__func__);
 		} else {
@@ -778,7 +775,7 @@ atbm_tx_h_calc_link_ids(struct atbm_vif *priv,
 
 	if (t->tx_info->control.sta &&
 			(t->tx_info->control.sta->uapsd_queues & BIT(t->queue)))
-		t->txpriv.link_id = atbm_uapsd_virtual_linkid();
+		t->txpriv.link_id = priv->link_id_uapsd;
 	return 0;
 }
 
@@ -957,7 +954,7 @@ atbm_tx_h_action(struct atbm_vif *priv,
 		(struct atbm_ieee80211_mgmt *)t->hdr;
 
 	if (ieee80211_is_action(t->hdr->frame_control) &&
-			mgmt->u.action.category == ATBM_WLAN_CATEGORY_BACK)
+			mgmt->u.action.category == WLAN_CATEGORY_BACK)
 		return 1;
 	else
 		return 0;
@@ -1265,11 +1262,7 @@ static int atbm_tx_h_rate_policy(struct atbm_common *hw_priv,
 			/*
 			*no sta ,get lower rate
 			*/
-			if(priv->vif->p2p == false){
-				tx_info->control.rates[0].idx = atbm_rate_lowest_index(sband,tx_info->control.sta);
-			}else {
-				tx_info->control.rates[0].idx = atbm_rate_lowest_non_cck_index(sband,tx_info->control.sta);
-			}
+			tx_info->control.rates[0].idx = atbm_rate_lowest_index(sband,tx_info->control.sta);
 			tx_info->flags |= IEEE80211_TX_CTL_USE_MINRATE;
 		}
 		
@@ -1477,7 +1470,7 @@ atbm_tx_h_pm_state(struct atbm_vif *priv,
 {
 	int was_buffered = 1;
 
-	if (t->txpriv.link_id == atbm_dtim_virtual_linkid() &&
+	if (t->txpriv.link_id == priv->link_id_after_dtim &&
 			!priv->buffered_multicasts) {
 		priv->buffered_multicasts = true;
 		if (priv->sta_asleep_mask)
@@ -1509,7 +1502,7 @@ atbm_tx_h_ba_stat(struct atbm_vif *priv,
 	spin_lock_bh(&hw_priv->ba_lock);
 	hw_priv->ba_acc += t->skb->len - t->hdrlen;
 	if (!(hw_priv->ba_cnt_rx || hw_priv->ba_cnt)) {
-		atbm_mod_timer(&hw_priv->ba_timer,
+		mod_timer(&hw_priv->ba_timer,
 			jiffies + ATBM_APOLLO_BLOCK_ACK_INTERVAL);
 	}
 	hw_priv->ba_cnt++;
@@ -1629,7 +1622,7 @@ void __atbm_tx(struct ieee80211_hw *dev, struct sk_buff *skb)
 
 #ifdef CONFIG_ATBM_SUPPORT_P2P
 	if ((ieee80211_is_action(frame->frame_control))
-                        && (mgmt->u.action.category == ATBM_WLAN_CATEGORY_PUBLIC)) {
+                        && (mgmt->u.action.category == WLAN_CATEGORY_PUBLIC)) {
                 u8 *action = (u8*)&mgmt->u.action.category;				
 				TxRxPublicActionFrame((u8*)mgmt,skb->len,1);
                 atbm_check_go_neg_conf_success(hw_priv, action);
@@ -2132,7 +2125,7 @@ void atbm_tx_confirm_cb(struct atbm_common *hw_priv,
 				priv->bss_loss_status =
 					ATBM_APOLLO_BSS_LOSS_CONFIRMED;
 				spin_unlock_bh(&priv->bss_loss_lock);
-				atbm_cancel_delayed_work(&priv->bss_loss_work);
+				cancel_delayed_work(&priv->bss_loss_work);
 				atbm_hw_priv_queue_delayed_work(hw_priv,
 						&priv->bss_loss_work, 0);
 			} else
@@ -2256,7 +2249,7 @@ atbm_rx_h_ba_stat(struct atbm_vif *priv,
 	spin_lock_bh(&hw_priv->ba_lock);
 	hw_priv->ba_acc_rx += skb_len - hdrlen;
 	if (!(hw_priv->ba_cnt_rx || hw_priv->ba_cnt)) {
-		atbm_mod_timer(&hw_priv->ba_timer,
+		mod_timer(&hw_priv->ba_timer,
 			jiffies + ATBM_APOLLO_BLOCK_ACK_INTERVAL);
 	}
 	hw_priv->ba_cnt_rx++;
@@ -2290,7 +2283,7 @@ void atbm_rx_cb(struct atbm_vif *priv,
 	}
 #ifdef CONFIG_ATBM_SUPPORT_P2P
 	if ((ieee80211_is_action(frame->frame_control))
-                        && (mgmt->u.action.category == ATBM_WLAN_CATEGORY_PUBLIC)) {
+                        && (mgmt->u.action.category == WLAN_CATEGORY_PUBLIC)) {
 		u8 *action = (u8*)&mgmt->u.action.category;
 		TxRxPublicActionFrame((u8*)mgmt,skb->len,0);
 		atbm_check_go_neg_conf_success(hw_priv, action);
@@ -2372,76 +2365,26 @@ void atbm_rx_cb(struct atbm_vif *priv,
 		}
 	}
 #endif
-#if 0
 	if (unlikely(arg->status)) {
 		if (arg->status == WSM_STATUS_MICFAILURE) {
 			atbm_printk_err( "[RX] MIC failure. ENCRYPTION [%d][%pM][%pM]\n",
 				WSM_RX_STATUS_ENCRYPTION(arg->flags),frame->addr1,frame->addr2);
 			hdr->flag |= RX_FLAG_MMIC_ERROR;
 		} else if (arg->status == WSM_STATUS_NO_KEY_FOUND) {
-			atbm_printk_err( "[RX] No key found.ENCRYPTION [%d]\n",WSM_RX_STATUS_ENCRYPTION(arg->flags));			
-			hdr->flag |= RX_FLAG_UNKOWN_STA_FRAME;
+			atbm_printk_err( "[RX] No key found.ENCRYPTION [%d]\n",WSM_RX_STATUS_ENCRYPTION(arg->flags));
 			if(priv->join_status != ATBM_APOLLO_JOIN_STATUS_AP){
+				hdr->flag |= RX_FLAG_UNKOWN_STA_FRAME;
 				goto drop;
 			}
 		} else {
 			atbm_printk_err("[RX] Receive failure: %d.ENCRYPTION [%d],fc(%x)\n",
-				arg->status,WSM_RX_STATUS_ENCRYPTION(arg->flags),mgmt->frame_control);			
-			hdr->flag |= RX_FLAG_UNKOWN_STA_FRAME;
+				arg->status,WSM_RX_STATUS_ENCRYPTION(arg->flags),mgmt->frame_control);
 			if(priv->join_status != ATBM_APOLLO_JOIN_STATUS_AP){
+				hdr->flag |= RX_FLAG_UNKOWN_STA_FRAME;
 				goto drop;
 			}
 		}
 	}
-#endif
-	 if (unlikely(arg->status)) {
-                struct sta_info *sta;
-                rcu_read_lock();
-                sta = (struct sta_info *)sta_info_get_rx(vif_to_sdata(priv->vif), frame->addr2);
-                if(sta){
-						if(priv->join_status != ATBM_APOLLO_JOIN_STATUS_STA_LISTEN)
-                        	atbm_printk_err("[%s Rx]:[%pM],PTK[%p],FLAGS[%lx],skb->len[%d]\n",
-                                vif_to_sdata(priv->vif)->name,frame->addr2,sta->ptk,sta->_flags,skb->len);
-                }else {
-						if(priv->join_status != ATBM_APOLLO_JOIN_STATUS_STA_LISTEN)
-                        	atbm_printk_err("[%s RX]:[%pM] is not assoctiated with us\n",
-                                        vif_to_sdata(priv->vif)->name,frame->addr2);
-                }
-				/*
-				*PMF:
-				*drop the frame which decrypted fail
-				*/
-				if(sta && test_sta_flag(sta, WLAN_STA_MFP)){
-					if(atbm_ieee80211_is_robust_mgmt_frame(skb) == true){
-						 rcu_read_unlock();
-						 atbm_printk_err("[RX]:drop PMF\n"); 
-						 goto drop;
-					}
-				}
-                rcu_read_unlock();
-                if (arg->status == WSM_STATUS_MICFAILURE) {
-						if(priv->join_status != ATBM_APOLLO_JOIN_STATUS_STA_LISTEN)
-                       	 atbm_printk_err( "[RX] MIC failure. ENCRYPTION [%d][%pM][%pM]\n",
-                                WSM_RX_STATUS_ENCRYPTION(arg->flags),frame->addr1,frame->addr2);
-                        hdr->flag |= RX_FLAG_MMIC_ERROR;
-                } else if (arg->status == WSM_STATUS_NO_KEY_FOUND) {
-						if(priv->join_status != ATBM_APOLLO_JOIN_STATUS_STA_LISTEN)
-                        	atbm_printk_err( "[RX] No key found.ENCRYPTION [%d][%pM][%pM]\n",
-                                        WSM_RX_STATUS_ENCRYPTION(arg->flags),frame->addr1,frame->addr2);
-                                hdr->flag |= RX_FLAG_UNKOWN_STA_FRAME;
-                        if(priv->join_status != ATBM_APOLLO_JOIN_STATUS_AP){
-                                goto drop;
-                        }
-                } else {
-                	if(priv->join_status != ATBM_APOLLO_JOIN_STATUS_STA_LISTEN)
-                        atbm_printk_err("[RX] Receive failure: %d.ENCRYPTION [%d][%pM][%pM],fc(%x)\n",
-                                arg->status,WSM_RX_STATUS_ENCRYPTION(arg->flags),frame->addr1,frame->addr2,mgmt->frame_control);
-                        hdr->flag |= RX_FLAG_UNKOWN_STA_FRAME;
-                        if(priv->join_status != ATBM_APOLLO_JOIN_STATUS_AP){
-                                goto drop;
-                        }
-                }
-	 	}
 #ifdef CHKSUM_HW_SUPPORT
 	else {
 		if (arg->flags & WSM_RX_STATUS_CHKSUM_ERROR){
@@ -2478,7 +2421,7 @@ void atbm_rx_cb(struct atbm_vif *priv,
 		goto drop;
 	}
 	else if((ieee80211_is_action(frame->frame_control))
-                        && (mgmt->u.action.category == ATBM_WLAN_CATEGORY_BACK)) 
+                        && (mgmt->u.action.category == WLAN_CATEGORY_BACK)) 
 	{
 		struct atbm_ba_params ba_params;
 		
@@ -2605,18 +2548,8 @@ void atbm_rx_cb(struct atbm_vif *priv,
 
 	}
 #else
-	if(WSM_RX_STATUS_ENCRYPTION(arg->flags)){
-		if(ieee80211_has_protected(frame->frame_control))
-			hdr->flag |= RX_FLAG_DECRYPTED;
-		else {
-			atbm_printk_err("[RX]: open frame decrypted?\n");
-		}
-	}else {
-		if(ieee80211_has_protected(frame->frame_control)){
-			atbm_printk_err("[RX]:need sw decrypted?\n");
-		}
-	}
-
+	if(ieee80211_has_protected(frame->frame_control))
+		hdr->flag |= RX_FLAG_DECRYPTED;
 	if (arg->status == WSM_STATUS_MICFAILURE) {
 			hdr->flag |= RX_FLAG_IV_STRIPPED;
 	}
@@ -2639,7 +2572,6 @@ void atbm_rx_cb(struct atbm_vif *priv,
 	if (arg->flags & WSM_RX_STATUS_AGGREGATE){
 		printk_once("<WIFI> rx ampdu ++ \n");
 		atbm_debug_rxed_agg(priv);
-		hdr->flag |= RX_FLAG_AMPDU;
 	}
 	if (ieee80211_is_beacon(frame->frame_control) &&
 			!arg->status &&
@@ -2719,7 +2651,7 @@ void atbm_rx_cb(struct atbm_vif *priv,
 		(!arg->status))
 	{
 		if(
-			(mgmt->u.action.category == ATBM_WLAN_CATEGORY_HT)
+			(mgmt->u.action.category == WLAN_CATEGORY_HT)
 			&&
 			(WLAN_HT_ACTION_NOTIFY_CHANWIDTH == mgmt->u.action.u.notify_chan_width.chan_width)
 		  )
@@ -2887,13 +2819,13 @@ int atbm_upload_keys(struct atbm_vif *priv)
 }
 #if 0
 /* Workaround for WFD test case 6.1.10 */
-void atbm_link_id_reset(struct atbm_work_struct *work)
+void atbm_link_id_reset(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, linkid_reset_work);
 	struct atbm_common *hw_priv = priv->hw_priv;
 	
-	//atbm_flush_workqueue(hw_priv->workqueue);
+	//flush_workqueue(hw_priv->workqueue);
 	if(atbm_bh_is_term(hw_priv)){
 		return;
 	}

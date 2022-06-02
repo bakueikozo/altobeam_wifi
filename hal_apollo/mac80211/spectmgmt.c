@@ -45,7 +45,7 @@ static void ieee80211_send_refuse_measurement_request(struct ieee80211_sub_if_da
 						IEEE80211_STYPE_ACTION);
 
 	atbm_skb_put(skb, 1 + sizeof(msr_report->u.action.u.measurement));
-	msr_report->u.action.category = ATBM_WLAN_CATEGORY_SPECTRUM_MGMT;
+	msr_report->u.action.category = WLAN_CATEGORY_SPECTRUM_MGMT;
 	msr_report->u.action.u.measurement.action_code =
 				WLAN_ACTION_SPCT_MSR_RPRT;
 	msr_report->u.action.u.measurement.dialog_token = dialog_token;

@@ -109,7 +109,7 @@ int atbm_sta_add(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		sta_priv->link_id = atbm_alloc_link_id(priv,sta->addr);
 		if(sta_priv->link_id){
 			atbm_printk_err("realloc link id(%d) mac[%pM]\n",sta_priv->link_id,sta->addr);
-			atbm_flush_workqueue(hw_priv->workqueue);
+			flush_workqueue(hw_priv->workqueue);
 		}else {			
 			WARN_ON(1);
 			return -ENOENT;
@@ -118,9 +118,9 @@ int atbm_sta_add(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 
 	entry = &priv->link_id_db[sta_priv->link_id - 1];
 	spin_lock_bh(&priv->ps_state_lock);
-//	if ((sta->uapsd_queues & IEEE80211_WMM_IE_STA_QOSINFO_AC_MASK) ==
-//					IEEE80211_WMM_IE_STA_QOSINFO_AC_MASK)
-//		priv->sta_asleep_mask |= BIT(sta_priv->link_id);
+	if ((sta->uapsd_queues & IEEE80211_WMM_IE_STA_QOSINFO_AC_MASK) ==
+					IEEE80211_WMM_IE_STA_QOSINFO_AC_MASK)
+		priv->sta_asleep_mask |= BIT(sta_priv->link_id);
 	entry->status = ATBM_APOLLO_LINK_HARD;
 	entry->timestamp = jiffies;
 	while ((skb = atbm_skb_dequeue(&entry->rx_queue)))
@@ -170,20 +170,20 @@ int atbm_sta_remove(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	synchronize_rcu();
 	
 	spin_lock_bh(&priv->ps_state_lock);
-//	if(priv->vif->p2p == false){
+	if(priv->vif->p2p == false){
 		entry->status = ATBM_APOLLO_LINK_SOFT;
 		smp_mb();
 		entry->timestamp = jiffies - ATBM_APOLLO_LINK_ID_GC_TIMEOUT - msecs_to_jiffies(10);
-	//}else {
-	//	entry->status = ATBM_APOLLO_LINK_RESERVE;
-	//	smp_mb();
-	//	entry->timestamp = jiffies;
-//	}
+	}else {
+		entry->status = ATBM_APOLLO_LINK_RESERVE;
+		smp_mb();
+		entry->timestamp = jiffies;
+	}
 	wsm_lock_tx_async(hw_priv);
 	if (atbm_hw_priv_queue_work(hw_priv, &priv->link_id_work) <= 0)
 		wsm_unlock_tx(hw_priv);
 	spin_unlock_bh(&priv->ps_state_lock);	
-	atbm_flush_workqueue(hw_priv->workqueue);
+	flush_workqueue(hw_priv->workqueue);
 	hw_priv->connected_sta_cnt--;
 #ifdef CONFIG_ATBM_AP_SUPPORT_ONE_AMPDU
 	if(hw_priv->connected_sta_cnt <= 1) {
@@ -301,11 +301,8 @@ static int atbm_set_tim_impl(struct atbm_vif *priv, bool aid0_bit_set)
 	skb = ieee80211_beacon_get_tim(priv->hw, priv->vif,
 			&tim_offset, &tim_length);
 	if (!skb) {
-		atbm_printk_err("%s : if_id[%d],if_name[%s] alloc skb err \n",__func__,priv->if_id,vif_to_sdata(priv->vif)->name);
-#if 0
 		if (!__atbm_flush(hw_priv, false, priv->if_id))
 			wsm_unlock_tx(hw_priv);
-#endif
 		return -ENOENT;
 	}
 
@@ -330,7 +327,7 @@ static int atbm_set_tim_impl(struct atbm_vif *priv, bool aid0_bit_set)
 	return 0;
 }
 
-void atbm_set_tim_work(struct atbm_work_struct *work)
+void atbm_set_tim_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, set_tim_work);
@@ -361,7 +358,7 @@ int atbm_set_tim(struct ieee80211_hw *dev, struct ieee80211_sta *sta,
 	return 0;
 }
 #if 0
-void atbm_set_cts_work(struct atbm_work_struct *work)
+void atbm_set_cts_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, set_cts_work.work);
@@ -605,7 +602,7 @@ void atbm_ibss_join_work(struct atbm_vif *priv)
 		memset(&priv->join_bssid[0],
 			0, sizeof(priv->join_bssid));
 
-		atbm_hw_cancel_delayed_work(&priv->join_timeout,true);
+		atbm_cancle_delayed_work(&priv->join_timeout,true);
 	} else {
 		/* Upload keys */
 		priv->join_status = ATBM_APOLLO_JOIN_STATUS_IBSS;
@@ -737,27 +734,21 @@ void atbm_bss_info_changed(struct ieee80211_hw *dev,
 				else if ((priv->power_set_true &&
 					((priv->powersave_mode.pmMode == WSM_PSM_ACTIVE) ||
                                         (priv->powersave_mode.pmMode == WSM_PSM_PS))) ||
-					!priv->power_set_true){
+					!priv->power_set_true)
 						priv->powersave_mode.pmMode = WSM_PSM_FAST_PS;
-				}
 				
 #ifdef ATBM_WIFI_NO_P2P_PS
 				if(priv->vif->p2p)
 					priv->powersave_mode.pmMode = WSM_PSM_ACTIVE;
 #endif
-				priv->powersave_mode.pmMode = WSM_PSM_ACTIVE;
-				atbm_printk_err("%s %d ,pmMode = %d \n",__func__,__LINE__,priv->powersave_mode.pmMode);
+				
 				ret = atbm_set_pm (priv, &priv->powersave_mode);
 				if(ret)
 					priv->powersave_mode = pm;
-			} else{
+			} else
 				priv->powersave_mode.pmMode = WSM_PSM_FAST_PS;
-				
-			}
 			priv->power_set_true = 0;
 			priv->user_power_set_true = 0;
-			priv->powersave_mode.pmMode = WSM_PSM_ACTIVE;
-			atbm_printk_err("%s %d : pmMode(%d) \n",__func__,__LINE__,priv->powersave_mode.pmMode);
 		}
 
 	}
@@ -928,7 +919,7 @@ void atbm_bss_info_changed(struct ieee80211_hw *dev,
 
 			/* Associated: kill join timeout */
 			mutex_unlock(&hw_priv->conf_mutex);
-			atbm_hw_cancel_delayed_work(&priv->join_timeout,false);
+			atbm_cancle_delayed_work(&priv->join_timeout,false);
 			mutex_lock(&hw_priv->conf_mutex);
 
 			rcu_read_lock();
@@ -1028,10 +1019,10 @@ void atbm_bss_info_changed(struct ieee80211_hw *dev,
 					info->cqm_tx_fail_thold;
 			priv->cqm_tx_failure_count = 0;
 #ifndef CONFIG_TX_NO_CONFIRM
-			atbm_hw_cancel_delayed_work(&priv->bss_loss_work,false);
-			atbm_hw_cancel_delayed_work(&priv->connection_loss_work,false);
+			atbm_cancle_delayed_work(&priv->bss_loss_work,false);
+			atbm_cancle_delayed_work(&priv->connection_loss_work,false);
 #endif
-			atbm_hw_cancel_delayed_work(&priv->dhcp_retry_work,false);
+			atbm_cancle_delayed_work(&priv->dhcp_retry_work,false);
 
 			priv->bss_params.beaconLostCount =
 					priv->cqm_beacon_loss_count ?
@@ -1246,7 +1237,6 @@ void atbm_bss_info_changed(struct ieee80211_hw *dev,
 	}
 #endif
 	if (changed & BSS_CHANGED_PS) {
-		
 		if (info->ps_enabled == false)
 			priv->powersave_mode.pmMode = WSM_PSM_ACTIVE;
 		else if (info->dynamic_ps_timeout <= 0)
@@ -1279,13 +1269,10 @@ void atbm_bss_info_changed(struct ieee80211_hw *dev,
 		if (priv->join_status == ATBM_APOLLO_JOIN_STATUS_STA &&
 				priv->bss_params.aid &&
 				priv->setbssparams_done &&
-				priv->filter4.enable){
-			priv->powersave_mode.pmMode = WSM_PSM_ACTIVE;	
-			atbm_printk_err("%s %d:pmMode = %d \n",__func__,__LINE__,priv->powersave_mode.pmMode);
+				priv->filter4.enable)
 			atbm_set_pm(priv, &priv->powersave_mode);
-		}else
+		else
 			priv->power_set_true = 1;
-		
 	}
 #ifndef CONFIG_RATE_HW_CONTROL
 	if (changed & BSS_CHANGED_RETRY_LIMITS) {
@@ -1322,13 +1309,8 @@ void atbm_bss_info_changed(struct ieee80211_hw *dev,
 
 			if(info->p2p_ps.ctwindow && info->p2p_ps.opp_ps)
 				priv->powersave_mode.pmMode = WSM_PSM_PS;
-			if (priv->join_status == ATBM_APOLLO_JOIN_STATUS_STA){
-				atbm_printk_err("%s %d:pmMode = %d \n",__func__,__LINE__,priv->powersave_mode.pmMode);
-			
+			if (priv->join_status == ATBM_APOLLO_JOIN_STATUS_STA)
 				atbm_set_pm(priv, &priv->powersave_mode);
-
-			}
-				
 		}
 
 		atbm_printk_ap("[AP] CTWindow: %d\n",
@@ -1399,14 +1381,14 @@ void atbm_bss_info_changed(struct ieee80211_hw *dev,
 
 }
 
-void atbm_multicast_start_work(struct atbm_work_struct *work)
+void atbm_multicast_start_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, multicast_start_work);
 	long tmo = priv->join_dtim_period *
 			(priv->beacon_int + 20) * HZ / 1024;
 
-	atbm_hw_cancel_queue_work(&priv->multicast_stop_work,true);
+	atbm_cancle_queue_work(&priv->multicast_stop_work,true);
 	if(atbm_bh_is_term(priv->hw_priv)){
 		return;
 	}
@@ -1414,12 +1396,12 @@ void atbm_multicast_start_work(struct atbm_work_struct *work)
 		wsm_lock_tx(priv->hw_priv);
 		atbm_set_tim_impl(priv, true);
 		priv->aid0_bit_set = true;
-		atbm_mod_timer(&priv->mcast_timeout, jiffies + tmo);
+		mod_timer(&priv->mcast_timeout, jiffies + tmo);
 		wsm_unlock_tx(priv->hw_priv);
 	}
 }
 
-void atbm_multicast_stop_work(struct atbm_work_struct *work)
+void atbm_multicast_stop_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, multicast_stop_work);
@@ -1427,7 +1409,7 @@ void atbm_multicast_stop_work(struct atbm_work_struct *work)
 		return;
 	}
 	if (priv->aid0_bit_set) {
-		atbm_del_timer_sync(&priv->mcast_timeout);
+		del_timer_sync(&priv->mcast_timeout);
 		wsm_lock_tx(priv->hw_priv);
 		priv->aid0_bit_set = false;
 		atbm_set_tim_impl(priv, false);
@@ -1512,7 +1494,7 @@ void atbm_suspend_resume(struct atbm_vif *priv,
 		}
 		spin_unlock_bh(&priv->ps_state_lock);
 		if (cancel_tmo)
-			atbm_del_timer_sync(&priv->mcast_timeout);
+			del_timer_sync(&priv->mcast_timeout);
 	} else {
 		spin_lock_bh(&priv->ps_state_lock);
 		atbm_ps_notify(priv, arg->link_id, arg->stop);
@@ -1806,14 +1788,12 @@ static int atbm_start_ap(struct atbm_vif *priv)
 				conf->basic_rates),
 #ifdef P2P_MULTIVIF
 		.CTWindow = priv->vif->p2p ? 0xFFFFFFFF : 0,
-#else
-		.CTWindow = 0,
 #endif
 	};
 
 	struct wsm_inactivity inactivity = {
-		.min_inactivity = 10,//50,
-		.max_inactivity = 5,//10,
+		.min_inactivity = 50,
+		.max_inactivity = 10,
 	};
 
 	struct wsm_operational_mode mode = {
@@ -2024,7 +2004,7 @@ int atbm_alloc_link_id(struct atbm_vif *priv, const u8 *mac)
 	return ret;
 }
 
-void atbm_link_id_work(struct atbm_work_struct *work)
+void atbm_link_id_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, link_id_work);
@@ -2038,7 +2018,7 @@ void atbm_link_id_work(struct atbm_work_struct *work)
 	wsm_unlock_tx(hw_priv);
 }
 
-void atbm_link_id_gc_work(struct atbm_work_struct *work)
+void atbm_link_id_gc_work(struct work_struct *work)
 {
 	struct atbm_vif *priv =
 		container_of(work, struct atbm_vif, link_id_gc_work.work);
@@ -2247,7 +2227,7 @@ int ABwifi_unmap_link(struct atbm_vif *priv, int link_id)
 
 }
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,3,0))
-void atbm_ht_info_update_work(struct atbm_work_struct *work)
+void atbm_ht_info_update_work(struct work_struct *work)
 {
     struct sk_buff *skb;
     struct atbm_ieee80211_mgmt *mgmt;
@@ -2320,25 +2300,18 @@ int atbm_start_monitor_mode(struct atbm_vif *priv,
 		wsm_unlock_tx(hw_priv);
 	}
 
-#ifndef ATBM_NOT_SUPPORT_40M_CHW
-	if(hw_priv->chip_version == ARES_6012B){
-		start.channel_type = (u32)(NL80211_CHAN_HT20);
-	}else{
-
-		if((channel_hw_value(chan)>=9)&&(channel_hw_value(chan)<=14))
-			start.channel_type = (u32)(NL80211_CHAN_HT40MINUS);
-		else if((channel_hw_value(chan)>0)&&(channel_hw_value(chan)<9))
-			start.channel_type = (u32)(NL80211_CHAN_HT40PLUS);
-		else if(channel_hw_value(chan) == 36)
-			start.channel_type = (u32)(NL80211_CHAN_HT40PLUS);
-		else if(channel_hw_value(chan) == 38)
-			start.channel_type = (u32)(NL80211_CHAN_HT40MINUS);
-		else {
-			return -1;
-		}
+#ifdef ATBM_SUPPORT_WIDTH_40M
+	if((channel_hw_value(chan)>=9)&&(channel_hw_value(chan)<=14))
+		start.channel_type = (u32)(NL80211_CHAN_HT40MINUS);
+	else if((channel_hw_value(chan)>0)&&(channel_hw_value(chan)<9))
+		start.channel_type = (u32)(NL80211_CHAN_HT40PLUS);
+	else if(channel_hw_value(chan) == 36)
+		start.channel_type = (u32)(NL80211_CHAN_HT40PLUS);
+	else if(channel_hw_value(chan) == 38)
+		start.channel_type = (u32)(NL80211_CHAN_HT40MINUS);
+	else {
+		return -1;
 	}
-#else
-	start.channel_type = (u32)(NL80211_CHAN_HT20);
 #endif
 	atbm_printk_ap("%s:if_id(%d),channel(%d)\n",__func__,priv->if_id,channel_hw_value(chan));
 	wsm_start(hw_priv, &start, ATBM_WIFI_GENERIC_IF_ID);
