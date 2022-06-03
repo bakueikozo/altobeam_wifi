@@ -63,7 +63,7 @@ ifeq ($(platform),PLATFORM_INGENICT31)
 ifeq ($(sys),linux)
 #KERDIR=/home/chenx/codegit/platform_t31_sdk/kernel
 CUR_DIR := $(shell pwd)
-KERDIR=$(CUR_DIR)/../kernel
+KERDIR=$(CUR_DIR)/../linux-custom
 CROSS_COMPILE:=mips-linux-gnu-
 endif
 export
