@@ -118,6 +118,10 @@ menu "Driver Extern Function Select"
 config ATBM_SUPPORT_BRIDGE
     bool "Enable wifi interface bridge function"
     default n
+config ATBM_SUPPORT_IBSS
+    bool "Enable IBSS Mode"
+    default n    
+    
 config ATBM_FUNC_NOTXCONFIRM
     bool "Enable Tx no confirm function to enhance performance"
     default y
