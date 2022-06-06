@@ -109,7 +109,7 @@ ccflags-y += -DWIFI_FW_DOWNLOAD
 # For offloading probe response to FW, the extra IE must be included
 # in the probe response template
 ccflags-y += -DATBM_PROBE_RESP_EXTRA_IE
-ccflags-y += -DCONFIG_ATBM_APOLLO_DEBUG
+#ccflags-y += -DCONFIG_ATBM_APOLLO_DEBUG
 ccflags-y += -DCONFIG_ATBM_STA_LISTEN
 ###################################################################
 #monitor hdr prism
@@ -429,7 +429,7 @@ CFLAGS_MODULE =$(MODFLAGS)
 ifeq ($(CONFIG_ATBM_APOLLO_DEBUGFS),y)
 ccflags-y  += -DCONFIG_ATBM_APOLLO_DEBUGFS
 endif
-ccflags-y  += -DCONFIG_ATBM_APOLLO_DEBUG
+#ccflags-y  += -DCONFIG_ATBM_APOLLO_DEBUG
 ccflags-y += -DCONFIG_MAC80211_ATBM_RC_DEFAULT_MINSTREL
 #ccflags-y += -DMINSTREL_SAMPLE_SKIP_LOW_RATE_HT
 #ccflags-y += -DMINSTREL_SAMPLE_SKIP_LOW_RATE
