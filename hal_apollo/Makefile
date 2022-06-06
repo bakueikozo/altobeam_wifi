@@ -1,3 +1,10 @@
+
+@echo "ibssenalbe?"
+@echo "IBSSENABLE"
+@echo "--------------"
+
+
+
 #CONFIG_TX_NO_CONFIRM
 #CONFIG_USB_AGGR_URB_TX
 #CONFIG_TX_NO_CONFIRM
@@ -43,10 +50,6 @@ endif
 ifneq ($(MODPMSTAYAWK),)
 ccflags-y += -DCONFIG_MODPMSTAYAWK=\"$(PLFDEVNAME)\"
 endif
-echo "ibssenalbe?"
-echo "IBSSENABLE"
-echo "--------------"
-
 ATBM_MODULES_NAME ?= $(MODULES_NAME)
 ifneq ($(FW),)
 ccflags-y += -DCONFIG_FW_NAME=\"$(FW)\"
