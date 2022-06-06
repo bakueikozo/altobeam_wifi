@@ -77,8 +77,6 @@ PRI_IE         ?= $(CONFIG_ATBM_FUNC_PRIVE_IE)
 MONHDRPRISM         ?= $(CONFIG_ATBM_FUNC_MONITOR_HDR_PRISM)
 IBSSENABLE 	?= $(CONFIG_ATBM_SUPPORT_IBSS)
 
-@echo "ibssenable=$(IBSSENABLE)"
-
 #############################################################
 #ATBM6041 ONLY USE SDIO
 ifeq ($(CONFIG_HERA),y)
