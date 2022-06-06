@@ -2,24 +2,24 @@
 #CONFIG_USB_AGGR_URB_TX
 #CONFIG_TX_NO_CONFIRM
 #
-# ��������ѡ��ͬ��ģʽ��CONFIG_USB_AGGR_URB_TX ������ʱһ����Ҫ����CONFIG_USE_DMA_ADDR_BUFFER
-# 1> CONFIG_USB_AGGR_URB_TX + CONFIG_TX_NO_CONFIRM��ÿ��urb ���Ͷ��txframe ���Ҳ���Ҫconfirm����Ҫ��lmac��NO_NEED_CONFIRM �꣬����ratecontrol��lmac ʵ��
-# 2> CONFIG_USB_AGGR_URB_TX ÿ��urb ���Ͷ��txframe ������Ҫconfirm����Ҫ�ر�lmac��NO_NEED_CONFIRM ��
-# 3> ���к궼�����壬ÿ��urb ����һ��txframe ������Ҫconfirm������urbֱ��ʹ��skbbuffer����Ҫ�ر�lmac��NO_NEED_CONFIRM ��
-# 4> ����CONFIG_USE_DMA_ADDR_BUFFER��ÿ��urb ����һ��txframe ������Ҫconfirm������urbֱ��DMAbuffer����Ҫ�����ݴ�skb copy��DMAbuffer����Ҫ�ر�lmac��NO_NEED_CONFIRM �꣬
-# 5> ����CONFIG_USE_DMA_ADDR_BUFFER+ CONFIG_TX_NO_CONFIRM��ÿ��urb ����һ��txframe ���Ҳ���Ҫconfirm������urbֱ��DMAbuffer����Ҫ�����ݴ�skb copy��DMAbuffer����Ҫ��lmac��NO_NEED_CONFIRM �꣬����ratecontrol��lmac ʵ��
-# 6> ����CONFIG_TX_NO_CONFIRM��ÿ��urb ����һ��txframe ���Ҳ���Ҫconfirm������urbֱ��ʹ��skbbuffer����Ҫ��lmac��NO_NEED_CONFIRM �꣬����ratecontrol��lmac ʵ��
+# 可以用来选择不同是模式，CONFIG_USB_AGGR_URB_TX 定义上时一定需要定义CONFIG_USE_DMA_ADDR_BUFFER
+# 1> CONFIG_USB_AGGR_URB_TX + CONFIG_TX_NO_CONFIRM，每个urb 发送多个txframe 并且不需要confirm，需要打开lmac的NO_NEED_CONFIRM 宏，并且ratecontrol在lmac 实现
+# 2> CONFIG_USB_AGGR_URB_TX 每个urb 发送多个txframe 并且需要confirm，需要关闭lmac的NO_NEED_CONFIRM 宏
+# 3> 所有宏都不定义，每个urb 发送一个txframe 并且需要confirm，并且urb直接使用skbbuffer，需要关闭lmac的NO_NEED_CONFIRM 宏
+# 4> 定义CONFIG_USE_DMA_ADDR_BUFFER，每个urb 发送一个txframe 并且需要confirm，并且urb直接DMAbuffer，需要把数据从skb copy到DMAbuffer，需要关闭lmac的NO_NEED_CONFIRM 宏，
+# 5> 定义CONFIG_USE_DMA_ADDR_BUFFER+ CONFIG_TX_NO_CONFIRM，每个urb 发送一个txframe 并且不需要confirm，并且urb直接DMAbuffer，需要把数据从skb copy到DMAbuffer，需要开lmac的NO_NEED_CONFIRM 宏，并且ratecontrol在lmac 实现
+# 6> 定义CONFIG_TX_NO_CONFIRM，每个urb 发送一个txframe 并且不需要confirm，并且urb直接使用skbbuffer，需要打开lmac的NO_NEED_CONFIRM 宏，并且ratecontrol在lmac 实现
 #
-##���ڵ�����+cpuǿ�İ���ʹ�� ģʽ1 ���� ģʽ2
-##���ڵ��ȿ�+cpu���İ���ʹ�� ģʽ3 ���� ģʽ6
-## Ĭ��ʹ��ģʽ 3
+##对于调度慢+cpu强的板子使用 模式1 或者 模式2
+##对于调度快+cpu慢的板子使用 模式3 或者 模式6
+## 默认使用模式 3
 #####################################################################################################################################################################################################################
 #ccflags-y += -DCONFIG_ATBM_APOLLO_5GHZ_SUPPORT
 #ccflags-y += -DCONFIG_ATBM_APOLLO_WAPI_SUPPORT
 #ccflags-y  += -I$(shell pwd)/../include/ \
         -include $(shell pwd)/../include/linux/compat-2.6.h \
         -DCOMPAT_STATIC
-##ָ�������ļ�·�����������ļ�����ʱʹ�������ļ��е�dcxoֵ��ʹ��efuse�е�dcxo�������ļ��е�delta_gainΪ����ֵ������ļ���������ֱ��ʹ��efuse�е�����
+##指定配置文件路径，当配置文件存在时使用配置文件中的dcxo值不使用efuse中的dcxo，配置文件中的delta_gain为修正值，如果文件不存在则直接使用efuse中的数据
 ATBM_CONFIG_FILE="/atbm_txpwer_dcxo_cfg.txt"
 ifneq ($(IF1NAME),)
 ccflags-y += -DCONFIG_IF1NAME=\"$(IF1NAME)\"
@@ -43,6 +43,9 @@ endif
 ifneq ($(MODPMSTAYAWK),)
 ccflags-y += -DCONFIG_MODPMSTAYAWK=\"$(PLFDEVNAME)\"
 endif
+echo ibssenalbe?
+echo IBSSENABLE
+echo --------------
 
 ATBM_MODULES_NAME ?= $(MODULES_NAME)
 ifneq ($(FW),)
