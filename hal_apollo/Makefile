@@ -60,8 +60,8 @@ ccflags-y += -DATBM_P2P_ADDR_USE_LOCAL_BIT
 ccflags-y += -DATBM_WIFI_QUEUE_LOCK_BUG
 ccflags-y += -DATBM_CHANGE_AP_TIMESTAMP_TO_BOOTTIME
 #ccflags-y += -DATBM_USE_SAVED_FW
-#ccflags-y += -DATBM_AP_SME
-#ccflags-y += -DP2P_MULTIVIF
+ccflags-y += -DATBM_AP_SME
+ccflags-y += -DP2P_MULTIVIF
 ccflags-y += -DATBM_P2P_CHANGE
 ccflags-y += -DATBM_WIFI_NO_P2P_PS
 ccflags-y += -DATBM_SPECIAL_PKG_DOWN_RATE
@@ -78,6 +78,7 @@ ccflags-y += -DCONFIG_ATBM_SUPPORT_SG
 #ccflags-y += -DCONFIG_ATBM_SUPPORT_COUNTRY_CODE
 #add AP+STA mode , sta channel change send event to hostapd
 ccflags-y += -DCONFIG_ATBM_AP_CHANNEL_CHANGE_EVENT
+ccflags-y += -DATBM_CONFIG_SUPPORT_IBSS
 
 ifeq ($(platform),PLATFORM_AMLOGIC_S805)
 ccflags-y += -DCONFIG_ATBM_APOLLO_USE_GPIO_IRQ
