@@ -43,9 +43,9 @@ endif
 ifneq ($(MODPMSTAYAWK),)
 ccflags-y += -DCONFIG_MODPMSTAYAWK=\"$(PLFDEVNAME)\"
 endif
-echo ibssenalbe?
-echo IBSSENABLE
-echo --------------
+echo "ibssenalbe?"
+echo "IBSSENABLE"
+echo "--------------"
 
 ATBM_MODULES_NAME ?= $(MODULES_NAME)
 ifneq ($(FW),)
