@@ -1,10 +1,3 @@
-
-@echo "ibssenalbe?"
-@echo "IBSSENABLE"
-@echo "--------------"
-
-
-
 #CONFIG_TX_NO_CONFIRM
 #CONFIG_USB_AGGR_URB_TX
 #CONFIG_TX_NO_CONFIRM
