@@ -60,7 +60,7 @@ ccflags-y += -DATBM_P2P_ADDR_USE_LOCAL_BIT
 ccflags-y += -DATBM_WIFI_QUEUE_LOCK_BUG
 ccflags-y += -DATBM_CHANGE_AP_TIMESTAMP_TO_BOOTTIME
 #ccflags-y += -DATBM_USE_SAVED_FW
-ccflags-y += -DATBM_AP_SME
+#ccflags-y += -DATBM_AP_SME
 #ccflags-y += -DP2P_MULTIVIF
 ccflags-y += -DATBM_P2P_CHANGE
 ccflags-y += -DATBM_WIFI_NO_P2P_PS
@@ -109,8 +109,8 @@ ccflags-y += -DWIFI_FW_DOWNLOAD
 # For offloading probe response to FW, the extra IE must be included
 # in the probe response template
 ccflags-y += -DATBM_PROBE_RESP_EXTRA_IE
-#ccflags-y += -DCONFIG_ATBM_APOLLO_DEBUG
-#ccflags-y += -DCONFIG_ATBM_STA_LISTEN
+ccflags-y += -DCONFIG_ATBM_APOLLO_DEBUG
+ccflags-y += -DCONFIG_ATBM_STA_LISTEN
 ###################################################################
 #monitor hdr prism
 ###################################################################
