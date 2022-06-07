@@ -78,7 +78,7 @@ ccflags-y += -DCONFIG_ATBM_SUPPORT_SG
 #ccflags-y += -DCONFIG_ATBM_SUPPORT_COUNTRY_CODE
 #add AP+STA mode , sta channel change send event to hostapd
 ccflags-y += -DCONFIG_ATBM_AP_CHANNEL_CHANGE_EVENT
-ccflags-y += -DATBM_CONFIG_SUPPORT_IBSS
+ccflags-y += -DCONFIG_ATBM_SUPPORT_IBSS
 IBSSENABLE=y
 
 ifeq ($(platform),PLATFORM_AMLOGIC_S805)
