@@ -575,7 +575,7 @@ void atbm_ibss_join_work(struct atbm_vif *priv)
 	/*Stay Awake for Join Timeout*/
 	atbm_pm_stay_awake(&hw_priv->pm_state, 3 * HZ);
 	#endif
-#if define(CONFIG_ATBM_STA_LISTEN) || defined(CONFIG_ATBM_SUPPORT_P2P)
+#if defined(CONFIG_ATBM_STA_LISTEN) || defined(CONFIG_ATBM_SUPPORT_P2P)
 	atbm_disable_listening(priv);
 #endif
 	WARN_ON(wsm_set_operational_mode(hw_priv, &mode, priv->if_id));
