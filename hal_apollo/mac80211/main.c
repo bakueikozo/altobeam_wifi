@@ -56,7 +56,9 @@
 #define WIFI_IF2NAME "p2p%d"
 #endif
 
-
+#ifdef CONFIG_ATBM_SUPPORT_IBSS
+#pragma message("SUPPORT IBSS")
+#endif
 #pragma message(WIFI_IF1NAME)
 #pragma message(WIFI_IF2NAME)
 static struct lock_class_key ieee80211_rx_skb_queue_class;
