@@ -409,7 +409,7 @@ ccflags-y += -DCONFIG_USB_AGGR_URB_TX
 ccflags-y += -DCONFIG_TX_NO_CONFIRM
 endif
 ifeq ($(SDIO_BUS),y)
-ccflags-y += -DMCAST_FWDING
+#ccflags-y += -DMCAST_FWDING
 ccflags-y += -DRESET_CHANGE
 ccflags-y += -DSDIO_BUS
 #ccflags-y += -DCONFIG_SDIO_IRQ_THREAD_PROCESS_DATA
