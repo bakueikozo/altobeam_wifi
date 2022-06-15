@@ -488,7 +488,7 @@ int __ieee80211_brigde_change_rxhdr(struct ieee80211_sub_if_data *sdata, struct 
 
 					u8 * ipaddr = (unsigned char *) &iph->daddr;
 					// forward unknow IP packet to upper TCP/IP
-					br_printk("atbm_br0: Replace DA with BR's MAC [%x:%x:%x:%x:%x:%x]->[%x:%x:%x:%x:%x:%x], ip %d.%d.%d.%d\n",
+					br_printk("atbm_br0: Replace DA with BR's MAC [%x:%x:%x:%x:%x:%x]->[%x:%x:%x:%x:%x:%x], ip %u.%u.%u.%u\n",
 						skb->data[0],skb->data[1],skb->data[2],skb->data[3],skb->data[4],skb->data[5],				
 											 priv->br_mac[0], 
 											 priv->br_mac[1], 
@@ -525,7 +525,7 @@ int __ieee80211_brigde_change_rxhdr(struct ieee80211_sub_if_data *sdata, struct 
             tip = arpptr;
 			memcpy(&tgt_ipaddr, arpptr, sizeof(u32));
 
-            atbm_printk_err("arp:ehdr[%pM][%pM],src_devaddr[%pM],tgt_devaddr[%pM],src_ipaddr[%d.%d.%d.%d],tgt_ipaddr[%d.%d.%d.%d]\n",skb->data,
+            atbm_printk_err("arp:ehdr[%pM][%pM],src_devaddr[%pM],tgt_devaddr[%pM],src_ipaddr[%u.%u.%u.%u],tgt_ipaddr[%u.%u.%u.%u]\n",skb->data,
                         skb->data+6,src_devaddr,tgt_devaddr,sip[0],sip[1],sip[2],sip[3],tip[0],tip[1],tip[2],tip[3]);
 			ieee80211_brigde_network_find_and_replace(sdata, skb,(unsigned char *) &tgt_ipaddr);
 			//if(memcmp(tgt_devaddr, skb->data, ETH_ALEN)){
