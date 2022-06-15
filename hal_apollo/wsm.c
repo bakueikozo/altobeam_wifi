@@ -39,7 +39,7 @@ extern void etf_v2_scan_rx(struct atbm_common *hw_priv,struct sk_buff *skb,u8 rs
 #include "sta.h"
 #endif /*ROAM_OFFLOAD*/
 #endif
-#define CONFIG_ATBM_APOLLO_WSM_DEBUG
+//#define CONFIG_ATBM_APOLLO_WSM_DEBUG
 #if defined(CONFIG_ATBM_APOLLO_WSM_DEBUG)
 #define wsm_printk  printk
 #else
