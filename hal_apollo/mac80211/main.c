@@ -56,6 +56,11 @@
 #define WIFI_IF2NAME "p2p%d"
 #endif
 
+static char *if1name = WIFI_IF1NAME;
+module_param(if1name,charp,S_IRUGO);
+
+static char *if2name = WIFI_IF2NAME;
+module_param(if2name,charp,S_IRUGO);
 
 #pragma message(WIFI_IF1NAME)
 #pragma message(WIFI_IF2NAME)
@@ -1606,8 +1611,8 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	if (hw->max_report_rates == 0)
 		hw->max_report_rates = hw->max_rates;
 	
-	BUG_ON(strlen(WIFI_IF1NAME)>IFNAMSIZ-1);
-	BUG_ON(strlen(WIFI_IF2NAME)>IFNAMSIZ-1);
+	BUG_ON(strlen(if1name)>IFNAMSIZ-1);
+	BUG_ON(strlen(if2name)>IFNAMSIZ-1);
 
 	/*
 	 * generic code guarantees at least one band,
@@ -1846,12 +1851,12 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 #endif
 	/* add one default STA interface if supported */
 	if (local->hw.wiphy->interface_modes & BIT(NL80211_IFTYPE_STATION)) {
-		result = ieee80211_if_add(local, WIFI_IF1NAME, NULL,
+		result = ieee80211_if_add(local, if1name, NULL,
 					  NL80211_IFTYPE_STATION, NULL);
 		if (result)
 			atbm_printk_warn("Failed to add default virtual iface\n");
 #if (ATBM_WIFI_PLATFORM != 12)//CDLINUX no need p2p0
-		result = ieee80211_if_add(local, WIFI_IF2NAME, NULL,
+		result = ieee80211_if_add(local, if2name, NULL,
 					  NL80211_IFTYPE_STATION, NULL);
 		if (result)
 			atbm_printk_warn("Failed to add default virtual p2p iface\n");
