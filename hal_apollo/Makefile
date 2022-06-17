@@ -110,7 +110,7 @@ ccflags-y += -DWIFI_FW_DOWNLOAD
 # in the probe response template
 ccflags-y += -DATBM_PROBE_RESP_EXTRA_IE
 #ccflags-y += -DCONFIG_ATBM_APOLLO_DEBUG
-#ccflags-y += -DCONFIG_ATBM_STA_LISTEN
+ccflags-y += -DCONFIG_ATBM_STA_LISTEN
 ###################################################################
 #monitor hdr prism
 ###################################################################
